@@ -261,6 +261,8 @@ def main():
     engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("ui2.qml"))))
     if not engine.rootObjects():
         raise RuntimeError("Unable to load ui2.qml")
+    if os.environ.get('APEX_SMOKE_TEST') == '1':
+        QTimer.singleShot(1500, app.quit)
     app.exec()
 
 
