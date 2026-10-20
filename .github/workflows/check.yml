@@ -21,5 +21,14 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           QSG_RHI_BACKEND: software
           APEX_SMOKE_TEST: '1'
+          MANAGER_HELPER_SCREENSHOT: manager-helper-preview.png
           HOME: ${{ runner.temp }}
         run: python ui2.py
+
+      - name: Upload rendered UI preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-helper-ui-preview
+          path: manager-helper-preview.png
+          if-no-files-found: warn
