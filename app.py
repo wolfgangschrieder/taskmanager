@@ -1,8 +1,9 @@
 import sys, sqlite3, json
 from pathlib import Path
 from datetime import datetime, timedelta
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle)
+from PySide6.QtGui import QKeySequence
+from PySide6.QtCore import Qt, QTimer, QDateTime
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle, QShortcut)
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
@@ -19,9 +20,9 @@ def run(q,p=()):con.execute(q,p);con.commit()
 class TaskDialog(QDialog):
     def __init__(self,parent=None,data=None):
         super().__init__(parent);self.setWindowTitle('Карточка задачи');self.resize(540,530)
-        form=QFormLayout(self);self.title=QLineEdit(data['title'] if data else '');self.body=QTextEdit(data['body'] if data else '');self.check=QTextEdit('\n'.join(json.loads(data['checklist'] or '[]')) if data else '');self.due_enabled=QCheckBox('Напомнить в указанное время');self.due=QDateTimeEdit();self.due.setCalendarPopup(True);self.due.setDateTime(datetime.now()+timedelta(minutes=30))
+        form=QFormLayout(self);self.title=QLineEdit(data['title'] if data else '');self.body=QTextEdit(data['body'] if data else '');self.check=QTextEdit('\n'.join(json.loads(data['checklist'] or '[]')) if data else '');self.due_enabled=QCheckBox('Напомнить в указанное время');self.due=QDateTimeEdit();self.due.setCalendarPopup(True);self.due.setDateTime(QDateTime.currentDateTime().addSecs(1800))
         if data and data['due']:
-            self.due_enabled.setChecked(True);self.due.setDateTime(datetime.fromisoformat(data['due']))
+            self.due_enabled.setChecked(True);self.due.setDateTime(QDateTime.fromString(data['due'],Qt.ISODate))
         form.addRow('Название',self.title);form.addRow('Описание / записи',self.body);form.addRow('Чек-лист (пункт на строку)',self.check);form.addRow(self.due_enabled);form.addRow('Когда',self.due)
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel);buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject);form.addRow(buttons)
     def values(self):return (self.title.text().strip(),self.body.toPlainText(),json.dumps([x.strip() for x in self.check.toPlainText().splitlines() if x.strip()],ensure_ascii=False),self.due.dateTime().toPython().isoformat(timespec='minutes') if self.due_enabled.isChecked() else None)
@@ -32,6 +33,11 @@ class App(QMainWindow):
         self.boards=QWidget();self.notes=QWidget();self.control=QWidget();self.tabs.addTab(self.boards,'▦  Доски');self.tabs.addTab(self.notes,'✎  Блокнот');self.tabs.addTab(self.control,'◷  Контроль')
         self.setup_boards();self.setup_notes();self.setup_control();self.tabs.currentChanged.connect(lambda _:self.refresh_all())
         self.tray=QSystemTrayIcon(self.style().standardIcon(QStyle.SP_MessageBoxInformation),self);self.tray.setToolTip('APEX TASK CONTROL');self.tray.show()
+        self.note_dirty=False
+        self.note_title.textChanged.connect(self.mark_note_dirty)
+        self.note_body.textChanged.connect(self.mark_note_dirty)
+        self.note_save_timer=QTimer(self);self.note_save_timer.setSingleShot(True);self.note_save_timer.setInterval(800);self.note_save_timer.timeout.connect(self.save_note)
+        self.quick_shortcut=QShortcut(QKeySequence('Ctrl+N'),self);self.quick_shortcut.activated.connect(self.quick_add)
         self.timer=QTimer(self);self.timer.timeout.connect(self.check_due);self.timer.start(15000);self.check_due()
         self.setStyleSheet('QMainWindow,QWidget{background:#121923;color:#e9eff9;font-size:13px} QLineEdit,QTextEdit,QListWidget,QComboBox,QDateTimeEdit{background:#202b3a;border:1px solid #344458;border-radius:6px;padding:7px;color:#f4f7ff} QPushButton{background:#315d91;border:0;border-radius:6px;padding:9px 13px;color:white} QPushButton:hover{background:#4075b4} QTabBar::tab{padding:12px 24px;background:#1c2938;color:#d8e5f7} QTabBar::tab:selected{background:#315d91} QListWidget::item{padding:9px} QListWidget::item:selected{background:#355476}')
     def setup_boards(self):
@@ -92,21 +98,31 @@ class App(QMainWindow):
         name,ok=QInputDialog.getText(self,'Новая папка','Название:')
         if ok and name.strip():run('INSERT INTO folders(name) VALUES(?)',(name.strip(),));self.refresh_folders()
     def refresh_notes(self):
-        self.note_list.clear();f=self.folder_list.currentItem()
+        self.flush_note();self.note_list.clear();f=self.folder_list.currentItem()
         if not f:return
         for n in rows('SELECT * FROM notes WHERE folder_id=? ORDER BY pinned DESC,id DESC',(f.data(Qt.UserRole),)):
             item=QListWidgetItem(('★ ' if n['pinned'] else '')+n['title']);item.setData(Qt.UserRole,n['id']);self.note_list.addItem(item)
+    def mark_note_dirty(self):
+        if getattr(self,'note_loading',False):return
+        self.note_dirty=True
+        if hasattr(self,'note_save_timer'):self.note_save_timer.start()
+    def flush_note(self):
+        if getattr(self,'note_dirty',False):
+            self.note_save_timer.stop()
+            self.save_note()
     def open_note(self):
+        self.note_loading=True
         item=self.note_list.currentItem()
-        if not item:self.note_title.clear();self.note_body.clear();return
-        n=rows('SELECT * FROM notes WHERE id=?',(item.data(Qt.UserRole),))[0];self.note_title.setText(n['title']);self.note_body.setPlainText(n['body'])
+        if not item:self.note_title.clear();self.note_body.clear();self.note_loading=False;self.note_dirty=False;return
+        n=rows('SELECT * FROM notes WHERE id=?',(item.data(Qt.UserRole),))[0];self.note_title.setText(n['title']);self.note_body.setPlainText(n['body']);self.note_loading=False;self.note_dirty=False
     def add_note(self):
         f=self.folder_list.currentItem()
         if not f:return
         run('INSERT INTO notes(folder_id,title) VALUES(?,?)',(f.data(Qt.UserRole),'Новая запись'));self.refresh_notes();self.note_list.setCurrentRow(0);self.note_title.setFocus()
     def save_note(self):
+        if getattr(self,'note_loading',False):return
         item=self.note_list.currentItem()
-        if item:run('UPDATE notes SET title=?,body=? WHERE id=?',(self.note_title.text().strip() or 'Без названия',self.note_body.toPlainText(),item.data(Qt.UserRole)));self.refresh_notes()
+        if item:run('UPDATE notes SET title=?,body=? WHERE id=?',(self.note_title.text().strip() or 'Без названия',self.note_body.toPlainText(),item.data(Qt.UserRole)));self.note_dirty=False;self.refresh_notes()
     def setup_control(self):
         v=QVBoxLayout(self.control);v.addWidget(QLabel('Задачи с напоминаниями'));self.due_list=QListWidget();self.due_list.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));v.addWidget(self.due_list);b=QPushButton('Обновить');b.clicked.connect(self.refresh_control);v.addWidget(b);self.refresh_control()
     def refresh_control(self):
@@ -119,6 +135,16 @@ class App(QMainWindow):
         for t in rows('SELECT * FROM tasks WHERE due IS NOT NULL AND due<=? AND reminded=0',(now,)):
             self.tray.showMessage('APEX: пора проверить задачу',t['title'],QSystemTrayIcon.Information,12000)
             run('UPDATE tasks SET reminded=1 WHERE id=?',(t['id'],))
-    def closeEvent(self,event):con.commit();super().closeEvent(event)
+    def quick_add(self):
+        self.tabs.setCurrentWidget(self.boards)
+        bid=self.board_pick.currentData()
+        lane=rows('SELECT id FROM lanes WHERE board_id=? ORDER BY position,id LIMIT 1',(bid,))
+        if not lane:
+            QMessageBox.information(self,'APEX','Сначала добавьте колонку.');return
+        self.add_task(lane[0]['id'])
+    def closeEvent(self,event):
+        self.flush_note()
+        con.commit()
+        super().closeEvent(event)
 if __name__=='__main__':
     app=QApplication(sys.argv);w=App();w.showMaximized();sys.exit(app.exec())
