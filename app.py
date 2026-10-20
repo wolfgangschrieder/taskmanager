@@ -2,12 +2,12 @@ import sys, sqlite3, json
 from board_widgets import TaskList
 from theme import make_style, PALETTES, ACCENTS, FONTS
 from datetime import date
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QMenu, QStyle
 from pathlib import Path
 from datetime import datetime, timedelta, time
-from PySide6.QtGui import QKeySequence, QShortcut, QColor, QBrush
-from PySide6.QtCore import Qt, QTimer, QDateTime, QSize
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea,QSpinBox,QFrame,QSizePolicy)
+from PySide6.QtGui import QKeySequence, QShortcut, QColor, QBrush, QPainter, QPen, QFontMetrics
+from PySide6.QtCore import Qt, QTimer, QDateTime, QSize, QRectF
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea,QSpinBox,QFrame,QSizePolicy,QStyledItemDelegate,QStyleOptionViewItem)
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
@@ -67,6 +67,51 @@ class TaskDialog(QDialog):
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel);buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject);form.addRow(buttons)
     def values(self):return (self.title.text().strip(),self.body.toPlainText(),json.dumps([x.strip() for x in self.check.toPlainText().splitlines() if x.strip()],ensure_ascii=False),self.due.dateTime().toPython().isoformat(timespec='minutes') if self.due_enabled.isChecked() else None)
     def selected_color(self):return self.color.currentData()
+class CardDelegate(QStyledItemDelegate):
+    """Paints each task directly: no nested widget geometry or clipping."""
+    def __init__(self, parent=None, accent='#5c96d8', light=False):
+        super().__init__(parent)
+        self.accent=accent
+        self.light=light
+
+    def sizeHint(self, option, index):
+        title=str(index.data(Qt.ItemDataRole.DisplayRole) or '')
+        width=max(170,option.rect.width()-32)
+        metrics=QFontMetrics(option.font)
+        lines=max(1,metrics.boundingRect(0,0,width-28,1000,Qt.TextFlag.TextWordWrap,title).height()//max(1,metrics.lineSpacing())+1)
+        return QSize(width,max(90,54+lines*metrics.lineSpacing()))
+
+    def paint(self,painter,option,index):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect=option.rect.adjusted(3,4,-3,-4)
+        selected=bool(option.state & QStyle.StateFlag.State_Selected)
+        surface='#ffffff' if self.light else '#253447'
+        border=self.accent if selected else ('#d7e0eb' if self.light else '#3b4c60')
+        painter.setPen(QPen(QColor(border),2 if selected else 1))
+        painter.setBrush(QColor(surface))
+        painter.drawRoundedRect(QRectF(rect),11,11)
+        color=index.data(Qt.ItemDataRole.UserRole+1) or self.accent
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawRoundedRect(QRectF(rect.left()+1,rect.top()+7,4,rect.height()-14),2,2)
+        fg='#253449' if self.light else '#f1f5fb'
+        muted='#66788c' if self.light else '#afc1d4'
+        title=str(index.data(Qt.ItemDataRole.DisplayRole) or '')
+        painter.setPen(QColor(fg))
+        font=option.font
+        font.setBold(True)
+        painter.setFont(font)
+        text_rect=rect.adjusted(17,12,-12,-34)
+        painter.drawText(text_rect,Qt.TextFlag.TextWordWrap|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop,title)
+        painter.setPen(QColor(muted))
+        font.setBold(False)
+        font.setPointSizeF(max(8,font.pointSizeF()-1))
+        painter.setFont(font)
+        meta=index.data(Qt.ItemDataRole.UserRole+2) or ''
+        painter.drawText(rect.adjusted(17,0,-10,-10),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignBottom,str(meta))
+        painter.restore()
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__();self.setWindowTitle('APEX // TASK CONTROL');self.resize(1300,800)
@@ -162,13 +207,23 @@ class App(QMainWindow):
             lst.moved.connect(self.drop_task)
             light=self.settings.get('theme')=='Светлая' if hasattr(self,'settings') else False
             accent=ACCENTS.get(self.settings.get('accent','Синий'),'#5c96d8') if hasattr(self,'settings') else '#5c96d8'
+            lst.setItemDelegate(CardDelegate(lst,accent,light))
             for task in tasks:
-                item=QListWidgetItem()
+                item=QListWidgetItem(task['title'])
                 item.setData(Qt.UserRole,task['id'])
+                item.setData(Qt.UserRole+1,task['color'] or accent)
+                details=[]
+                if task['due']:
+                    try:
+                        due=datetime.fromisoformat(task['due'])
+                        details.append(('ПРОСРОЧЕНО  ' if due<datetime.now() else 'ДО  ')+due.strftime('%d.%m %H:%M'))
+                    except ValueError:pass
+                try:
+                    checks=json.loads(task['checklist'] or '[]')
+                    if checks:details.append('ПУНКТОВ  '+str(len(checks)))
+                except (ValueError,TypeError):pass
+                item.setData(Qt.UserRole+2,'   ·   '.join(details))
                 lst.addItem(item)
-                card=self.make_task_card(task,accent,light)
-                item.setSizeHint(card.sizeHint()+QSize(0,6))
-                lst.setItemWidget(item,card)
             lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)))
             lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             lst.customContextMenuRequested.connect(lambda point,l=lst:self.task_menu(l,point))
@@ -178,43 +233,6 @@ class App(QMainWindow):
             add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid))
             v.addWidget(add)
             self.lanes.addWidget(panel,1)
-
-    def make_task_card(self,task,accent,light):
-        card=QFrame()
-        card.setObjectName('taskCard')
-        surface='#ffffff' if light else '#253447'
-        border='#d7e0eb' if light else '#35475d'
-        foreground='#223246' if light else '#eef4fa'
-        secondary='#68798d' if light else '#b4c4d6'
-        color=task['color'] or accent
-        card.setStyleSheet(
-            f'QFrame#taskCard{{background:{surface};border:1px solid {border};'
-            f'border-left:4px solid {color};border-radius:10px;}}'
-            f'QFrame#taskCard QLabel{{background:transparent;border:0;}}')
-        layout=QVBoxLayout(card)
-        layout.setContentsMargins(13,12,11,12)
-        layout.setSpacing(7)
-        title=QLabel(task['title'])
-        title.setWordWrap(True)
-        title.setStyleSheet(f'font-weight:600;color:{foreground};')
-        layout.addWidget(title)
-        details=[]
-        if task['due']:
-            try:
-                due=datetime.fromisoformat(task['due'])
-                prefix='ПРОСРОЧЕНО' if due<datetime.now() else 'ДО'
-                details.append(prefix+'  '+due.strftime('%d.%m  %H:%M'))
-            except ValueError:pass
-        try:
-            checklist=json.loads(task['checklist'] or '[]')
-            if checklist:details.append('ПУНКТОВ  '+str(len(checklist)))
-        except (ValueError,TypeError):pass
-        if details:
-            meta=QLabel('     ·     '.join(details))
-            meta.setWordWrap(True)
-            meta.setStyleSheet(f'color:{secondary};font-size:11px;font-weight:500;')
-            layout.addWidget(meta)
-        return card
 
     def drop_task(self, task_id, lane_id, index):
         # Rebuild positions atomically; the source and destination may coincide.
