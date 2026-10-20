@@ -290,12 +290,69 @@ class App(QMainWindow):
         task_id=item.data(Qt.ItemDataRole.UserRole)
         menu=QMenu(lst)
         edit=menu.addAction('Открыть карточку')
+        appearance=menu.addAction('Оформление карточки…')
         delete=menu.addAction('Удалить карточку…')
         action=menu.exec(lst.mapToGlobal(point))
         if action==edit:self.edit_task(task_id)
+        elif action==appearance:self.appearance_dialog('tasks',task_id)
         elif action==delete:
             if QMessageBox.question(self,'Удалить карточку?','Это действие нельзя отменить. Продолжить?')==QMessageBox.StandardButton.Yes:
                 run('DELETE FROM tasks WHERE id=?',(task_id,));self.refresh_all()
+
+    def appearance_dialog(self,table,record_id):
+        if table not in ('lanes','tasks'):return
+        record=rows(f'SELECT * FROM {table} WHERE id=?',(record_id,))
+        if not record:return
+        record=record[0]
+        dialog=QDialog(self)
+        dialog.setWindowTitle('Оформление колонки' if table=='lanes' else 'Оформление задачи')
+        dialog.resize(450,320)
+        form=QFormLayout(dialog)
+        values={'bg_color':record['bg_color'] or '', 'text_color':record['text_color'] or '',
+                'color':record['color'] or ''}
+        def picker(key,default):
+            color=QColorDialog.getColor(QColor(values[key] or default),dialog,'Выберите цвет')
+            if color.isValid():
+                values[key]=color.name()
+                update_button(key)
+        buttons={}
+        def update_button(key):
+            value=values[key]
+            buttons[key].setText(value.upper() if value else 'По умолчанию')
+            if value:buttons[key].setStyleSheet('QPushButton {border:2px solid '+value+';}')
+            else:buttons[key].setStyleSheet('')
+        for key,label,default in [
+            ('bg_color','Цвет фона','#253447'),
+            ('text_color','Цвет текста','#eef3fa'),
+            ('color','Цветовой маркер','#5c96d8')]:
+            button=QPushButton()
+            buttons[key]=button
+            update_button(key)
+            button.clicked.connect(lambda _,k=key,d=default:picker(k,d))
+            form.addRow(label,button)
+        width=None
+        if table=='lanes':
+            width=QSpinBox()
+            width.setRange(240,720)
+            width.setSingleStep(20)
+            width.setSuffix(' px')
+            width.setValue(record['width'] or 320)
+            form.addRow('Ширина колонки',width)
+        reset=QPushButton('Сбросить цвета элемента')
+        reset.clicked.connect(lambda:[(values.__setitem__(k,''),update_button(k)) for k in values])
+        form.addRow(reset)
+        actions=QDialogButtonBox(QDialogButtonBox.StandardButton.Save|QDialogButtonBox.StandardButton.Cancel)
+        actions.accepted.connect(dialog.accept)
+        actions.rejected.connect(dialog.reject)
+        form.addRow(actions)
+        if dialog.exec()!=QDialog.DialogCode.Accepted:return
+        if table=='lanes':
+            run('UPDATE lanes SET bg_color=?,text_color=?,color=?,width=? WHERE id=?',
+                (values['bg_color'],values['text_color'],values['color'],width.value(),record_id))
+        else:
+            run('UPDATE tasks SET bg_color=?,text_color=?,color=? WHERE id=?',
+                (values['bg_color'],values['text_color'],values['color'],record_id))
+        self.refresh_all()
 
     def ask_color(self, current=''):
         color=QColorDialog.getColor(QColor(current or '#8ac9e8'),self,'Выбрать цвет')
@@ -329,14 +386,13 @@ class App(QMainWindow):
     def lane_menu(self,lid):
         lane=rows('SELECT * FROM lanes WHERE id=?',(lid,))
         if not lane:return
-        lane=lane[0];menu=QMenu(self);rename=menu.addAction('Переименовать');color=menu.addAction('Выбрать цвет');toggle=menu.addAction('Выключить контроль таймеров' if lane['timer_enabled'] else 'Включить контроль таймеров');delete=menu.addAction('Удалить колонку…')
+        lane=lane[0];menu=QMenu(self);rename=menu.addAction('Переименовать');color=menu.addAction('Настроить оформление и ширину…');toggle=menu.addAction('Выключить контроль таймеров' if lane['timer_enabled'] else 'Включить контроль таймеров');delete=menu.addAction('Удалить колонку…')
         action=menu.exec(self.cursor().pos())
         if action==rename:
             name,ok=QInputDialog.getText(self,'Название колонки','Название:',text=lane['name'])
             if ok and name.strip():run('UPDATE lanes SET name=? WHERE id=?',(name.strip(),lid));self.refresh_board()
         elif action==color:
-            value=self.ask_color(lane['color'])
-            if value:run('UPDATE lanes SET color=? WHERE id=?',(value,lid));self.refresh_board()
+            self.appearance_dialog('lanes',lid)
         elif action==toggle:
             run('UPDATE lanes SET timer_enabled=? WHERE id=?',(0 if lane['timer_enabled'] else 1,lid))
             self.refresh_all()
