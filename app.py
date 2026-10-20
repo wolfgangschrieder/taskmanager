@@ -1,4 +1,8 @@
 import sys, sqlite3, json
+from board_widgets import TaskList
+from theme import STYLE
+from datetime import date
+from PySide6.QtWidgets import QMenu
 from pathlib import Path
 from datetime import datetime, timedelta
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -7,14 +11,24 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBo
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
+BACKUPS=ROOT/'backups'; BACKUPS.mkdir(exist_ok=True)
 con=sqlite3.connect(DB)
 con.row_factory=sqlite3.Row
+con.execute('PRAGMA busy_timeout=5000')
 con.executescript('''CREATE TABLE IF NOT EXISTS boards(id INTEGER PRIMARY KEY,name TEXT NOT NULL);CREATE TABLE IF NOT EXISTS lanes(id INTEGER PRIMARY KEY,board_id INTEGER NOT NULL,name TEXT NOT NULL,position INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY,lane_id INTEGER NOT NULL,title TEXT NOT NULL,body TEXT DEFAULT '',checklist TEXT DEFAULT '[]',due TEXT,reminded INTEGER DEFAULT 0,position INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS folders(id INTEGER PRIMARY KEY,name TEXT NOT NULL);CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,folder_id INTEGER NOT NULL,title TEXT NOT NULL,body TEXT DEFAULT '',pinned INTEGER DEFAULT 0);''')
 if not con.execute('SELECT 1 FROM boards').fetchone():
     con.execute('INSERT INTO boards(name) VALUES(?)',('Работа',)); bid=con.execute('SELECT last_insert_rowid()').fetchone()[0]
     for i,n in enumerate(['Входящие','В работе','Ожидание','Готово']):con.execute('INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)',(bid,n,i))
 if not con.execute('SELECT 1 FROM folders').fetchone():con.execute('INSERT INTO folders(name) VALUES(?)',('Общие заметки',))
 con.commit()
+# Consistent snapshot; never copy an open SQLite file directly.
+backup_path=BACKUPS/('apex-'+date.today().isoformat()+'.db')
+if not backup_path.exists():
+    try:
+        with sqlite3.connect(backup_path) as backup:
+            con.backup(backup)
+    except sqlite3.Error:
+        backup_path.unlink(missing_ok=True)
 def rows(q,p=()):return con.execute(q,p).fetchall()
 def run(q,p=()):con.execute(q,p);con.commit()
 class TaskDialog(QDialog):
@@ -34,12 +48,14 @@ class App(QMainWindow):
         self.setup_boards();self.setup_notes();self.setup_control();self.tabs.currentChanged.connect(lambda _:self.refresh_all())
         self.tray=QSystemTrayIcon(self.style().standardIcon(QStyle.SP_MessageBoxInformation),self);self.tray.setToolTip('APEX TASK CONTROL');self.tray.show()
         self.note_dirty=False
+        self.active_note_id=None
         self.note_title.textChanged.connect(self.mark_note_dirty)
         self.note_body.textChanged.connect(self.mark_note_dirty)
         self.note_save_timer=QTimer(self);self.note_save_timer.setSingleShot(True);self.note_save_timer.setInterval(800);self.note_save_timer.timeout.connect(self.save_note)
         self.quick_shortcut=QShortcut(QKeySequence('Ctrl+N'),self);self.quick_shortcut.activated.connect(self.quick_add)
         self.timer=QTimer(self);self.timer.timeout.connect(self.check_due);self.timer.start(15000);self.check_due()
-        self.setStyleSheet('QMainWindow,QWidget{background:#121923;color:#e9eff9;font-size:13px} QLineEdit,QTextEdit,QListWidget,QComboBox,QDateTimeEdit{background:#202b3a;border:1px solid #344458;border-radius:6px;padding:7px;color:#f4f7ff} QPushButton{background:#315d91;border:0;border-radius:6px;padding:9px 13px;color:white} QPushButton:hover{background:#4075b4} QTabBar::tab{padding:12px 24px;background:#1c2938;color:#d8e5f7} QTabBar::tab:selected{background:#315d91} QListWidget::item{padding:9px} QListWidget::item:selected{background:#355476}')
+        self.setStyleSheet(STYLE)
+        self.statusBar().showMessage('Готово • данные сохраняются локально')
     def setup_boards(self):
         lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane);top.addStretch();lay.addLayout(top)
         self.lanes=QHBoxLayout();lay.addLayout(self.lanes,1);self.refresh_boards()
@@ -60,13 +76,45 @@ class App(QMainWindow):
         if bid is None:return
         for lane in rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(bid,)):
             panel=QWidget();v=QVBoxLayout(panel);v.addWidget(QLabel('●  '+lane['name']))
-            lst=QListWidget();lst.setMinimumWidth(210);lst.setDragEnabled(True);lst.setAcceptDrops(False)
+            lst=TaskList(lane['id']);lst.setMinimumWidth(210);lst.moved.connect(self.drop_task)
             for task in rows('SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id',(lane['id'],)):
                 item=QListWidgetItem(task['title']+('   ⏰' if task['due'] else ''));item.setData(Qt.UserRole,task['id']);lst.addItem(item)
-            lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));v.addWidget(lst,1)
+            lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);lst.customContextMenuRequested.connect(lambda point,l=lst:self.task_menu(l,point));v.addWidget(lst,1)
             add=QPushButton('+ Карточка');add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid));v.addWidget(add)
             move=QPushButton('Переместить выбранную →');move.clicked.connect(lambda _,l=lst,lid=lane['id']:self.move_task(l,lid));v.addWidget(move)
             self.lanes.addWidget(panel,1)
+    def drop_task(self, task_id, lane_id, index):
+        # Rebuild positions atomically; the source and destination may coincide.
+        task=con.execute('SELECT lane_id FROM tasks WHERE id=?',(task_id,)).fetchone()
+        if not task:return
+        source=task['lane_id']
+        ids=[r['id'] for r in rows('SELECT id FROM tasks WHERE lane_id=? AND id!=? ORDER BY position,id',(lane_id,task_id))]
+        ids.insert(max(0,min(index,len(ids))),task_id)
+        try:
+            with con:
+                con.execute('UPDATE tasks SET lane_id=? WHERE id=?',(lane_id,task_id))
+                for pos,tid in enumerate(ids):
+                    con.execute('UPDATE tasks SET position=? WHERE id=?',(pos,tid))
+                if source!=lane_id:
+                    for pos,r in enumerate(rows('SELECT id FROM tasks WHERE lane_id=? ORDER BY position,id',(source,))):
+                        con.execute('UPDATE tasks SET position=? WHERE id=?',(pos,r['id']))
+        except sqlite3.Error as error:
+            QMessageBox.warning(self,'Ошибка перемещения',str(error))
+        self.refresh_board()
+
+    def task_menu(self, lst, point):
+        item=lst.itemAt(point)
+        if not item:return
+        task_id=item.data(Qt.ItemDataRole.UserRole)
+        menu=QMenu(lst)
+        edit=menu.addAction('Открыть карточку')
+        delete=menu.addAction('Удалить карточку…')
+        action=menu.exec(lst.mapToGlobal(point))
+        if action==edit:self.edit_task(task_id)
+        elif action==delete:
+            if QMessageBox.question(self,'Удалить карточку?','Это действие нельзя отменить. Продолжить?')==QMessageBox.StandardButton.Yes:
+                run('DELETE FROM tasks WHERE id=?',(task_id,));self.refresh_all()
+
     def add_board(self):
         name,ok=QInputDialog.getText(self,'Новая доска','Название:')
         if ok and name.strip():run('INSERT INTO boards(name) VALUES(?)',(name.strip(),));self.refresh_boards()
@@ -86,7 +134,7 @@ class App(QMainWindow):
         if ok:run('UPDATE tasks SET lane_id=? WHERE id=?',(lanes[names.index(name)]['id'],item.data(Qt.UserRole)));self.refresh_board()
     def setup_notes(self):
         h=QHBoxLayout(self.notes);left=QVBoxLayout();self.folder_list=QListWidget();self.folder_list.currentItemChanged.connect(lambda *_:self.refresh_notes());left.addWidget(QLabel('Папки'));left.addWidget(self.folder_list);b=QPushButton('+ Папка');b.clicked.connect(self.add_folder);left.addWidget(b);h.addLayout(left,1)
-        middle=QVBoxLayout();middle.addWidget(QLabel('Записи'));self.note_list=QListWidget();self.note_list.currentItemChanged.connect(lambda *_:self.open_note());middle.addWidget(self.note_list);b=QPushButton('+ Запись');b.clicked.connect(self.add_note);middle.addWidget(b);h.addLayout(middle,2)
+        middle=QVBoxLayout();middle.addWidget(QLabel('Записи'));self.note_list=QListWidget();self.note_list.currentItemChanged.connect(lambda *_:self.change_note());middle.addWidget(self.note_list);b=QPushButton('+ Запись');b.clicked.connect(self.add_note);middle.addWidget(b);h.addLayout(middle,2)
         right=QVBoxLayout();self.note_title=QLineEdit();self.note_title.setPlaceholderText('Заголовок');self.note_body=QTextEdit();right.addWidget(self.note_title);right.addWidget(self.note_body);b=QPushButton('Сохранить запись');b.clicked.connect(self.save_note);right.addWidget(b);h.addLayout(right,4);self.refresh_folders()
     def refresh_folders(self):
         current=self.folder_list.currentItem().data(Qt.UserRole) if self.folder_list.currentItem() else None;self.folder_list.clear()
@@ -105,8 +153,14 @@ class App(QMainWindow):
                 item=QListWidgetItem(('★ ' if n['pinned'] else '')+n['title']);item.setData(Qt.UserRole,n['id']);self.note_list.addItem(item)
                 if n['id']==selected:self.note_list.setCurrentItem(item)
         self.note_list.blockSignals(False)
-        if self.note_list.currentItem() is None:
-            self.open_note()
+        self.change_note()
+    def change_note(self):
+        item=self.note_list.currentItem()
+        next_id=item.data(Qt.UserRole) if item else None
+        if next_id==getattr(self,'active_note_id',None):return
+        self.flush_note()
+        self.active_note_id=next_id
+        self.open_note()
     def mark_note_dirty(self):
         if getattr(self,'note_loading',False):return
         self.note_dirty=True
@@ -117,17 +171,26 @@ class App(QMainWindow):
             self.save_note()
     def open_note(self):
         self.note_loading=True
-        item=self.note_list.currentItem()
-        if not item:self.note_title.clear();self.note_body.clear();self.note_loading=False;self.note_dirty=False;return
-        n=rows('SELECT * FROM notes WHERE id=?',(item.data(Qt.UserRole),))[0];self.note_title.setText(n['title']);self.note_body.setPlainText(n['body']);self.note_loading=False;self.note_dirty=False
+        if self.active_note_id is None:
+            self.note_title.clear();self.note_body.clear()
+        else:
+            record=rows('SELECT * FROM notes WHERE id=?',(self.active_note_id,))
+            if record:
+                self.note_title.setText(record[0]['title'])
+                self.note_body.setPlainText(record[0]['body'])
+        self.note_loading=False
+        self.note_dirty=False
     def add_note(self):
         f=self.folder_list.currentItem()
         if not f:return
         run('INSERT INTO notes(folder_id,title) VALUES(?,?)',(f.data(Qt.UserRole),'Новая запись'));self.refresh_notes();self.note_list.setCurrentRow(0);self.note_title.setFocus()
     def save_note(self):
         if getattr(self,'note_loading',False):return
-        item=self.note_list.currentItem()
-        if item:run('UPDATE notes SET title=?,body=? WHERE id=?',(self.note_title.text().strip() or 'Без названия',self.note_body.toPlainText(),item.data(Qt.UserRole)));self.note_dirty=False;self.refresh_notes()
+        note_id=getattr(self,'active_note_id',None)
+        if note_id is None:return
+        run('UPDATE notes SET title=?,body=? WHERE id=?',(self.note_title.text().strip() or 'Без названия',self.note_body.toPlainText(),note_id))
+        self.note_dirty=False
+        self.refresh_notes()
     def setup_control(self):
         v=QVBoxLayout(self.control);v.addWidget(QLabel('Задачи с напоминаниями'));self.due_list=QListWidget();self.due_list.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));v.addWidget(self.due_list);b=QPushButton('Обновить');b.clicked.connect(self.refresh_control);v.addWidget(b);self.refresh_control()
     def refresh_control(self):
