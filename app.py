@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBo
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
 BACKUPS=ROOT/'backups'; BACKUPS.mkdir(exist_ok=True)
+first_run=not DB.exists()
 con=sqlite3.connect(DB)
 con.row_factory=sqlite3.Row
 con.execute('PRAGMA busy_timeout=5000')
@@ -21,10 +22,10 @@ for table in ('tasks','notes','folders','boards','lanes'):
     cols={row['name'] for row in con.execute(f'PRAGMA table_info({table})')}
     if 'color' not in cols:
         con.execute(f"ALTER TABLE {table} ADD COLUMN color TEXT DEFAULT ''")
-if not con.execute('SELECT 1 FROM boards').fetchone():
+if first_run and not con.execute('SELECT 1 FROM boards').fetchone():
     con.execute('INSERT INTO boards(name) VALUES(?)',('Работа',)); bid=con.execute('SELECT last_insert_rowid()').fetchone()[0]
     for i,n in enumerate(['Входящие','В работе','Ожидание','Готово']):con.execute('INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)',(bid,n,i))
-if not con.execute('SELECT 1 FROM folders').fetchone():con.execute('INSERT INTO folders(name) VALUES(?)',('Общие заметки',))
+if first_run and not con.execute('SELECT 1 FROM folders').fetchone():con.execute('INSERT INTO folders(name) VALUES(?)',('Общие заметки',))
 con.commit()
 # Consistent snapshot; never copy an open SQLite file directly.
 backup_path=BACKUPS/('apex-'+date.today().isoformat()+'.db')
@@ -210,6 +211,7 @@ class App(QMainWindow):
         b=QPushButton('+ Запись');b.clicked.connect(self.add_note);middle.addWidget(b);h.addLayout(middle,2)
         right=QVBoxLayout();self.note_title=QLineEdit();self.note_title.setPlaceholderText('Заголовок');self.note_body=QTextEdit();right.addWidget(self.note_title);right.addWidget(self.note_body);b=QPushButton('Сохранить запись');b.clicked.connect(self.save_note);right.addWidget(b);h.addLayout(right,4);self.refresh_folders()
     def refresh_folders(self):
+        self.flush_note() if hasattr(self,'note_save_timer') else None
         current=self.folder_list.currentItem().data(Qt.UserRole) if self.folder_list.currentItem() else None;self.folder_list.clear()
         for f in rows('SELECT * FROM folders ORDER BY id'):
             item=QListWidgetItem(f['name']);item.setData(Qt.UserRole,f['id']);self.folder_list.addItem(item)
