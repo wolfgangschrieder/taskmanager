@@ -143,7 +143,7 @@ class App(QMainWindow):
             settings.get('theme','Тёмно-синий'),
             settings.get('accent','Синий'),
             settings.get('font','Segoe UI'),
-            settings.get('font_size',13)))
+            settings.get('font_size',13),settings.get('background') or None))
         self.refresh_board()
 
     def show_settings(self):
@@ -164,12 +164,25 @@ class App(QMainWindow):
         form.addRow('Акцент',accent)
         form.addRow('Шрифт',font)
         form.addRow('Размер текста',size)
+        selected_colors={'background':self.settings.get('background',''),'card_bg':self.settings.get('card_bg','')}
+        background_button=QPushButton('Выбрать цвет…')
+        card_button=QPushButton('Выбрать цвет…')
+        def pick_color(key,default):
+            color=QColorDialog.getColor(QColor(selected_colors[key] or default),dialog,'Цвет оформления')
+            if color.isValid():selected_colors[key]=color.name()
+        background_button.clicked.connect(lambda:pick_color('background','#101924'))
+        card_button.clicked.connect(lambda:pick_color('card_bg','#253447'))
+        form.addRow('Фон приложения',background_button)
+        form.addRow('Фон карточек',card_button)
+        reset=QPushButton('Сбросить индивидуальные цвета')
+        reset.clicked.connect(lambda:selected_colors.update({'background':'','card_bg':''}))
+        form.addRow(reset)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Save|QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept);buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
         if dialog.exec()==QDialog.DialogCode.Accepted:
             self.settings={'theme':theme.currentText(),'accent':accent.currentText(),
-                'font':font.currentText(),'font_size':size.value()}
+                'font':font.currentText(),'font_size':size.value(),**selected_colors}
             save_settings(self.settings)
             self.apply_theme()
 
