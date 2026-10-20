@@ -22,6 +22,10 @@ for table in ('tasks','notes','folders','boards','lanes'):
     cols={row['name'] for row in con.execute(f'PRAGMA table_info({table})')}
     if 'color' not in cols:
         con.execute(f"ALTER TABLE {table} ADD COLUMN color TEXT DEFAULT ''")
+# Schema migration for existing installations (no data deletion).
+lane_columns={row['name'] for row in con.execute('PRAGMA table_info(lanes)')}
+if 'timer_enabled' not in lane_columns:
+    con.execute('ALTER TABLE lanes ADD COLUMN timer_enabled INTEGER NOT NULL DEFAULT 1')
 if first_run and not con.execute('SELECT 1 FROM boards').fetchone():
     con.execute('INSERT INTO boards(name) VALUES(?)',('Работа',)); bid=con.execute('SELECT last_insert_rowid()').fetchone()[0]
     for i,n in enumerate(['Входящие','В работе','Ожидание','Готово']):con.execute('INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)',(bid,n,i))
