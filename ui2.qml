@@ -11,12 +11,12 @@ ApplicationWindow {
     minimumHeight: 640
     title: "MANAGER HELPER // 1.1"
     color: appBg
-    property color appBg: "#101923"
-    property color surface: "#192535"
-    property color elevated: "#243348"
-    property color foreground: "#ecf2fb"
-    property color secondary: "#a5b5c8"
-    property color accent: "#79b7e8"
+    property color appBg: "#0b111d"
+    property color surface: "#141f30"
+    property color elevated: "#1e3048"
+    property color foreground: "#f0f5ff"
+    property color secondary: "#899db9"
+    property color accent: "#6fc4ff"
     property int page: 0
     property int boardId: 0
     property int folderId: 0
@@ -73,8 +73,8 @@ ApplicationWindow {
 
     component Panel: Rectangle {
         color: root.surface
-        radius: 15
-        border.color: "#32445b"
+        radius: 18
+        border.color: "#293a53"
         border.width: 1
     }
     component ActionButton: Button {
@@ -83,9 +83,9 @@ ApplicationWindow {
         font.weight: Font.DemiBold
         palette.buttonText: root.foreground
         background: Rectangle {
-            radius: 9
-            color: button.down ? "#354b66" : button.hovered ? "#30435c" : root.elevated
-            border.color: button.hovered ? root.accent : "#3b4d62"
+            radius: 11
+            color: button.down ? "#2c5675" : button.hovered ? "#29435f" : button.highlighted ? "#234764" : root.elevated
+            border.color: button.hovered || button.highlighted ? root.accent : "#334b65"
         }
     }
     component TextField2: TextField {
@@ -103,13 +103,13 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 218
+            Layout.preferredWidth: 238
             Layout.fillHeight: true
-            color: "#141f2d"
+            color: "#0f1929"
             border.color: "#2a3b4f"
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 18
+                anchors.margins: 22
                 spacing: 13
                 Label { text: "MANAGER"; color: root.foreground; font.pixelSize: 24; font.bold: true }
                 Label { text: "HELPER  /  v1.1"; color: root.accent; font.pixelSize: 13; font.bold: true }
@@ -134,13 +134,13 @@ ApplicationWindow {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 22
+            Layout.margins: 28
             spacing: 16
             RowLayout {
                 Layout.fillWidth: true
                 Label {
                     text: ["Рабочие доски","Расписание","Блокнот","Оформление"][root.page]
-                    color: root.foreground; font.pixelSize: 26; font.weight: Font.DemiBold
+                    color: root.foreground; font.pixelSize: 30; font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
                 Label { text: Qt.formatDateTime(new Date(),"dd.MM.yyyy"); color: root.secondary; font.pixelSize: 13 }
@@ -170,19 +170,21 @@ ApplicationWindow {
                     Flickable {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        id: boardScroll
                         contentWidth: laneRow.implicitWidth
                         contentHeight: height
                         clip: true
                         Row {
                             id: laneRow
-                            spacing: 14
+                            height: boardScroll.height
+                            spacing: 18
                             Repeater {
                                 model: root.laneData
                                 delegate: Panel {
                                     id: lanePanel
                                     required property var modelData
                                     width: Math.max(250,Math.min(600,modelData.width || 320))
-                                    height: Math.min(laneRow.height, laneColumn.implicitHeight+24)
+                                    height: Math.min(boardScroll.height - 8, Math.max(190, laneColumn.implicitHeight+24))
                                     color: modelData.bg_color || root.surface
                                     Column {
                                         id: laneColumn
@@ -219,7 +221,7 @@ ApplicationWindow {
                                                 height: 58
                                                 radius: 9
                                                 color: modelData.bg_color || "#25364a"
-                                                border.color: "#40526a"
+                                                border.color: "#34506d"
                                                 Rectangle {
                                                     x: 0; y: 7; width: 4; height: parent.height-14
                                                     radius: 2
