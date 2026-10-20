@@ -1,14 +1,23 @@
-name: Python checks
+name: Python and QML checks
 on:
   push:
   pull_request:
 jobs:
-  syntax:
+  smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Qt
+        run: python -m pip install -r requirements.txt
       - name: Compile Python sources
-        run: python -m compileall -q app.py board_widgets.py theme.py
+        run: python -m compileall -q app.py board_widgets.py theme.py ui2.py
+      - name: Launch QML offscreen
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QSG_RHI_BACKEND: software
+          APEX_SMOKE_TEST: '1'
+          HOME: ${{ runner.temp }}
+        run: python ui2.py
