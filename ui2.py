@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QUrl
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QDesktopServices
 from PySide6.QtQml import QQmlApplicationEngine
 
 ROOT = Path.home() / ".apex_task_control"
@@ -54,6 +54,9 @@ class Workspace(QObject):
             self.db.execute("ALTER TABLE lanes ADD COLUMN timer_enabled INTEGER DEFAULT 1")
         if "width" not in cols:
             self.db.execute("ALTER TABLE lanes ADD COLUMN width INTEGER DEFAULT 320")
+        task_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(tasks)")}
+        if "telegram_url" not in task_cols:
+            self.db.execute("ALTER TABLE tasks ADD COLUMN telegram_url TEXT DEFAULT ''")
         if not self.db.execute("SELECT 1 FROM boards").fetchone():
             self.db.execute("INSERT INTO boards(name) VALUES('Работа')")
             board_id = self.db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -144,6 +147,31 @@ class Workspace(QObject):
     def styleTask(self, task_id, background, foreground, accent):
         self._write("UPDATE tasks SET bg_color=?,text_color=?,color=? WHERE id=?",
                     (background,foreground,accent,task_id))
+
+    @Slot(int, str, str, str, str)
+    def configureTask(self, task_id, background, foreground, accent, telegram_url):
+        """Save appearance and optional Telegram deep link for a task."""
+        telegram_url = telegram_url.strip()
+        if telegram_url:
+            url = QUrl.fromUserInput(telegram_url)
+            scheme = url.scheme().lower()
+            host = url.host().lower()
+            if not ((scheme == "https" and host in ("t.me", "telegram.me", "telegram.dog"))
+                    or (scheme == "tg" and url.isValid())):
+                return
+            telegram_url = url.toString()
+        self._write("UPDATE tasks SET bg_color=?,text_color=?,color=?,telegram_url=? WHERE id=?",
+                    (background,foreground,accent,telegram_url,task_id))
+
+    @Slot(str, result=bool)
+    def openTelegram(self, raw_url):
+        """Open only Telegram links with the Windows default protocol handler/browser."""
+        url = QUrl.fromUserInput(raw_url.strip())
+        scheme, host = url.scheme().lower(), url.host().lower()
+        if not ((scheme == "https" and host in ("t.me", "telegram.me", "telegram.dog"))
+                or (scheme == "tg" and url.isValid())):
+            return False
+        return QDesktopServices.openUrl(url)
 
     @Slot(int, bool)
     def timerLane(self, lane_id, enabled):
