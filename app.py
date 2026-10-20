@@ -122,6 +122,7 @@ class CardDelegate(QStyledItemDelegate):
 class App(QMainWindow):
     def __init__(self):
         super().__init__();self.setWindowTitle('APEX // TASK CONTROL');self.resize(1300,800)
+        self.settings=load_settings()
         self.tabs=QTabWidget();self.setCentralWidget(self.tabs)
         self.boards=QWidget();self.notes=QWidget();self.control=QWidget();self.tabs.addTab(self.boards,'▦  Доски');self.tabs.addTab(self.notes,'✎  Блокнот');self.tabs.addTab(self.control,'◷  Расписание')
         self.setup_boards();self.setup_notes();self.setup_control();self.tabs.currentChanged.connect(lambda _:self.refresh_all())
@@ -134,7 +135,6 @@ class App(QMainWindow):
         self.quick_shortcut=QShortcut(QKeySequence('Ctrl+N'),self);self.quick_shortcut.activated.connect(self.quick_add)
         self.timer=QTimer(self);self.timer.timeout.connect(self.check_due);self.timer.start(15000);self.check_due()
         self.schedule_timer=QTimer(self);self.schedule_timer.timeout.connect(self.refresh_control);self.schedule_timer.start(30000)
-        self.settings=load_settings()
         self.apply_theme()
         self.statusBar().showMessage('Готово • данные сохраняются локально')
     def apply_theme(self):
