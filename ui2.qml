@@ -213,14 +213,14 @@ ApplicationWindow {
                                             }
                                         }
                                         Repeater {
-                                            model: workspace.tasks(lanePanel.modelData.id)
+                                            model: lanePanel.modelData ? workspace.tasks(lanePanel.modelData.id) : []
                                             delegate: Rectangle {
                                                 id: taskCard
                                                 required property var modelData
                                                 width: laneColumn.width
-                                                height: 58
-                                                radius: 9
-                                                color: modelData.bg_color || "#25364a"
+                                                height: 72
+                                                radius: 12
+                                                color: modelData.bg_color || "#1e3046"
                                                 border.color: "#34506d"
                                                 Rectangle {
                                                     x: 0; y: 7; width: 4; height: parent.height-14
@@ -236,7 +236,7 @@ ApplicationWindow {
                                                         Layout.fillWidth: true
                                                         text: taskCard.modelData.title
                                                         color: taskCard.modelData.text_color || root.foreground
-                                                        font.pixelSize: 13
+                                                        font.pixelSize: 14
                                                         font.weight: Font.DemiBold
                                                         elide: Text.ElideRight
                                                     }
