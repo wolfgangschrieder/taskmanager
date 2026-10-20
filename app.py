@@ -98,10 +98,15 @@ class App(QMainWindow):
         name,ok=QInputDialog.getText(self,'Новая папка','Название:')
         if ok and name.strip():run('INSERT INTO folders(name) VALUES(?)',(name.strip(),));self.refresh_folders()
     def refresh_notes(self):
-        self.flush_note();self.note_list.clear();f=self.folder_list.currentItem()
-        if not f:return
-        for n in rows('SELECT * FROM notes WHERE folder_id=? ORDER BY pinned DESC,id DESC',(f.data(Qt.UserRole),)):
-            item=QListWidgetItem(('★ ' if n['pinned'] else '')+n['title']);item.setData(Qt.UserRole,n['id']);self.note_list.addItem(item)
+        self.flush_note();selected=self.note_list.currentItem().data(Qt.UserRole) if self.note_list.currentItem() else None
+        self.note_list.blockSignals(True);self.note_list.clear();f=self.folder_list.currentItem()
+        if f:
+            for n in rows('SELECT * FROM notes WHERE folder_id=? ORDER BY pinned DESC,id DESC',(f.data(Qt.UserRole),)):
+                item=QListWidgetItem(('★ ' if n['pinned'] else '')+n['title']);item.setData(Qt.UserRole,n['id']);self.note_list.addItem(item)
+                if n['id']==selected:self.note_list.setCurrentItem(item)
+        self.note_list.blockSignals(False)
+        if self.note_list.currentItem() is None:
+            self.open_note()
     def mark_note_dirty(self):
         if getattr(self,'note_loading',False):return
         self.note_dirty=True
