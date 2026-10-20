@@ -1,5 +1,6 @@
 """APEX UI 2.0 data bridge. Keeps the existing SQLite database untouched."""
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
