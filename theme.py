@@ -13,8 +13,11 @@ ACCENTS = {
 FONTS = ["Segoe UI", "Inter", "Arial", "Calibri", "Verdana", "Tahoma"]
 
 
-def make_style(theme="Тёмно-синий", accent="Синий", font="Segoe UI", size=13):
+def make_style(theme="Тёмно-синий", accent="Синий", font="Segoe UI", size=13, background=None):
     bg, surface, border, muted = PALETTES.get(theme, PALETTES["Тёмно-синий"])
+    if background:
+        from PySide6.QtGui import QColor
+        if QColor(background).isValid(): bg=background
     primary = ACCENTS.get(accent, ACCENTS["Синий"])
     light = theme == "Светлая"
     fg = "#202c3c" if light else "#edf3fb"
