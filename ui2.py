@@ -31,6 +31,7 @@ class Workspace(QObject):
             CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,folder_id INTEGER NOT NULL,title TEXT NOT NULL,body TEXT DEFAULT '',pinned INTEGER DEFAULT 0);
         """)
         self._migrate()
+        self._backup()
         self._pending_alarm = None
         self._ticker = QTimer(self)
         self._ticker.timeout.connect(self.check_alarms)
@@ -58,6 +59,14 @@ class Workspace(QObject):
             for position, name in enumerate(("Входящие", "В работе", "Ожидание", "Готово")):
                 self.db.execute("INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)", (board_id,name,position))
         self.db.commit()
+
+    def _backup(self):
+        backup_dir=ROOT / "backups"
+        backup_dir.mkdir(exist_ok=True)
+        destination=backup_dir / ("apex-ui2-"+datetime.now().strftime("%Y-%m-%d")+".db")
+        if not destination.exists():
+            with sqlite3.connect(destination) as target:
+                self.db.backup(target)
 
     def _query(self, sql, args=()):
         return [dict(row) for row in self.db.execute(sql, args)]
@@ -164,8 +173,8 @@ class Workspace(QObject):
     def deleteTask(self, task_id):
         self._write("DELETE FROM tasks WHERE id=?", (task_id,))
 
-    @Slot(int, str)
-    def addFolder(self, name, unused=""):
+    @Slot(str)
+    def addFolder(self, name):
         if name.strip():
             self._write("INSERT INTO folders(name) VALUES(?)", (name.strip(),))
 
