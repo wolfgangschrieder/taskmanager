@@ -198,7 +198,7 @@ class App(QMainWindow):
         lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.setMinimumWidth(200);self.board_pick.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon);self.board_pick.setMinimumContentsLength(20);self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
         options=QPushButton('⋯ Доска');options.clicked.connect(self.board_menu);top.addWidget(options)
         top.addStretch();settings=QPushButton('Настройки вида');settings.clicked.connect(self.show_settings);top.addWidget(settings);lay.addLayout(top)
-        self.lanes=QHBoxLayout();self.lanes.setSpacing(14);self.lanes.setAlignment(Qt.AlignmentFlag.AlignLeft);lay.addLayout(self.lanes,1);self.refresh_boards()
+        self.lanes=QHBoxLayout();self.lanes.setSpacing(14);self.lanes.setAlignment(Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop);lay.addLayout(self.lanes,0);lay.addStretch(1);self.refresh_boards()
     def refresh_boards(self):
         selected=self.board_pick.currentData();self.board_pick.blockSignals(True);self.board_pick.clear()
         for b in rows('SELECT * FROM boards ORDER BY id'):self.board_pick.addItem(b['name'],b['id'])
@@ -236,7 +236,8 @@ class App(QMainWindow):
             lst=TaskList(lane['id'])
             lst.setObjectName('kanbanList')
             lst.setMinimumWidth(210)
-            lst.setSpacing(9)
+            lst.setSpacing(4)
+            lst.setFixedHeight(min(540,max(76,len(tasks)*68+12)))
             lst.moved.connect(self.drop_task)
             light=self.settings.get('theme')=='Светлая' if hasattr(self,'settings') else False
             accent=ACCENTS.get(self.settings.get('accent','Синий'),'#5c96d8') if hasattr(self,'settings') else '#5c96d8'
@@ -263,7 +264,8 @@ class App(QMainWindow):
             add.setObjectName('addTaskButton')
             add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid))
             v.addWidget(add)
-            self.lanes.addWidget(panel,0)
+            panel.setSizePolicy(QSizePolicy.Policy.Fixed,QSizePolicy.Policy.Fixed)
+            self.lanes.addWidget(panel,0,Qt.AlignmentFlag.AlignTop)
 
     def drop_task(self, task_id, lane_id, index):
         # Rebuild positions atomically; the source and destination may coincide.
