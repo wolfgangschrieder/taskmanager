@@ -1,0 +1,473 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
+
+ApplicationWindow {
+    id: root
+    visible: true
+    visibility: Window.Maximized
+    minimumWidth: 900
+    minimumHeight: 640
+    title: "APEX // TASK CONTROL 2.0"
+    color: appBg
+    property color appBg: "#101923"
+    property color surface: "#192535"
+    property color elevated: "#243348"
+    property color foreground: "#ecf2fb"
+    property color secondary: "#a5b5c8"
+    property color accent: "#79b7e8"
+    property int page: 0
+    property int boardId: 0
+    property int folderId: 0
+    property int selectedNote: 0
+    property int editTaskId: 0
+    property int editLaneId: 0
+    property int alarmTaskId: 0
+    property var boardData: []
+    property var laneData: []
+    property var folderData: []
+    property var noteData: []
+    property var scheduleData: []
+
+    function refresh() {
+        boardData = workspace.boards()
+        if (!boardId && boardData.length) boardId=boardData[0].id
+        laneData=workspace.lanes(boardId)
+        folderData=workspace.folders()
+        if (!folderId && folderData.length) folderId=folderData[0].id
+        noteData=workspace.notes(folderId)
+        scheduleData=workspace.schedule()
+    }
+    function deadlineText(raw) {
+        if (!raw) return ""
+        return raw.replace("T"," ").slice(5,16)
+    }
+    function taskEditor(task, lane) {
+        editTaskId=task ? task.id : 0
+        editLaneId=lane
+        taskTitle.text=task ? task.title : ""
+        taskBody.text=task ? task.body : ""
+        taskDue.text=task && task.due ? task.due.replace("T"," ") : ""
+        taskAccent.text=task ? (task.color || "") : ""
+        taskDialog.open()
+    }
+    Component.onCompleted: {
+        var settings=workspace.appearance()
+        if (settings.background) appBg=settings.background
+        if (settings.accent && settings.accent[0]==="#") accent=settings.accent
+        refresh()
+    }
+    Connections {
+        target: workspace
+        function onChanged() { root.refresh() }
+        function onAlarmRaised(taskId,title,due) {
+            root.alarmTaskId=taskId
+            alarmTitle.text=title
+            alarmDue.text="Срок: "+due.replace("T"," ")
+            alarmDialog.open()
+            root.raise()
+            root.requestActivate()
+        }
+    }
+
+    component Panel: Rectangle {
+        color: root.surface
+        radius: 15
+        border.color: "#32445b"
+        border.width: 1
+    }
+    component ActionButton: Button {
+        id: button
+        font.pixelSize: 13
+        font.weight: Font.DemiBold
+        palette.buttonText: root.foreground
+        background: Rectangle {
+            radius: 9
+            color: button.down ? "#354b66" : button.hovered ? "#30435c" : root.elevated
+            border.color: button.hovered ? root.accent : "#3b4d62"
+        }
+    }
+    component TextField2: TextField {
+        color: root.foreground
+        selectionColor: root.accent
+        font.pixelSize: 14
+        background: Rectangle {
+            color: "#223146"
+            border.color: parent.activeFocus ? root.accent : "#3a4d63"
+            radius: 9
+        }
+    }
+
+    RowLayout {
+        anchors.fill: parent
+        spacing: 0
+        Rectangle {
+            Layout.preferredWidth: 218
+            Layout.fillHeight: true
+            color: "#141f2d"
+            border.color: "#2a3b4f"
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 13
+                Label { text: "APEX"; color: root.foreground; font.pixelSize: 28; font.bold: true }
+                Label { text: "TASK CONTROL / WORKSPACE"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 1 }
+                Item { Layout.preferredHeight: 14 }
+                Repeater {
+                    model: ["Доски","Расписание","Блокнот","Оформление"]
+                    delegate: ActionButton {
+                        required property int index
+                        required property string modelData
+                        Layout.fillWidth: true
+                        text: modelData
+                        highlighted: root.page===index
+                        onClicked: root.page=index
+                    }
+                }
+                Item { Layout.fillHeight: true }
+                Label { text: "ЛОКАЛЬНЫЕ ДАННЫЕ"; color: root.secondary; font.pixelSize: 10 }
+                Label { text: "SQLite · без облака"; color: root.secondary; font.pixelSize: 12 }
+            }
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.margins: 22
+            spacing: 16
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: ["Рабочие доски","Расписание","Блокнот","Оформление"][root.page]
+                    color: root.foreground; font.pixelSize: 26; font.weight: Font.DemiBold
+                }
+                Item { Layout.fillWidth: true }
+                Label { text: Qt.formatDateTime(new Date(),"dd.MM.yyyy"); color: root.secondary; font.pixelSize: 13 }
+            }
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: root.page
+                ColumnLayout {
+                    spacing: 15
+                    RowLayout {
+                        spacing: 10
+                        ComboBox {
+                            id: boardPicker
+                            Layout.preferredWidth: 300
+                            model: root.boardData
+                            textRole: "name"
+                            valueRole: "id"
+                            currentIndex: root.boardData.findIndex(function(b){return b.id===root.boardId})
+                            onActivated: function(i) { root.boardId=root.boardData[i].id; root.refresh() }
+                        }
+                        ActionButton { text: "+ Доска"; onClicked: { promptMode="board"; promptTitle.text=""; promptDialog.open() } }
+                        ActionButton { text: "+ Колонка"; onClicked: { promptMode="lane"; promptTitle.text=""; promptDialog.open() } }
+                        Item { Layout.fillWidth: true }
+                        Label { text: root.laneData.length+" колонок"; color: root.secondary }
+                    }
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        contentWidth: laneRow.implicitWidth
+                        contentHeight: height
+                        clip: true
+                        Row {
+                            id: laneRow
+                            spacing: 14
+                            Repeater {
+                                model: root.laneData
+                                delegate: Panel {
+                                    id: lanePanel
+                                    required property var modelData
+                                    width: Math.max(250,Math.min(600,modelData.width || 320))
+                                    height: Math.min(laneRow.height, laneColumn.implicitHeight+24)
+                                    color: modelData.bg_color || root.surface
+                                    Column {
+                                        id: laneColumn
+                                        x: 12; y: 12; width: parent.width-24
+                                        spacing: 9
+                                        RowLayout {
+                                            width: parent.width
+                                            Label {
+                                                text: lanePanel.modelData.name
+                                                color: lanePanel.modelData.text_color || root.foreground
+                                                font.pixelSize: 15; font.bold: true
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                            ActionButton {
+                                                text: "···"
+                                                onClicked: {
+                                                    laneSettingsId=lanePanel.modelData.id
+                                                    laneBackground.text=lanePanel.modelData.bg_color || ""
+                                                    laneForeground.text=lanePanel.modelData.text_color || ""
+                                                    laneAccent.text=lanePanel.modelData.color || ""
+                                                    laneWidth.value=lanePanel.modelData.width || 320
+                                                    laneTimer.checked=Boolean(lanePanel.modelData.timer_enabled)
+                                                    laneSettings.open()
+                                                }
+                                            }
+                                        }
+                                        Repeater {
+                                            model: workspace.tasks(lanePanel.modelData.id)
+                                            delegate: Rectangle {
+                                                id: taskCard
+                                                required property var modelData
+                                                width: laneColumn.width
+                                                height: 58
+                                                radius: 9
+                                                color: modelData.bg_color || "#25364a"
+                                                border.color: "#40526a"
+                                                Rectangle {
+                                                    x: 0; y: 7; width: 4; height: parent.height-14
+                                                    radius: 2
+                                                    color: taskCard.modelData.color || root.accent
+                                                }
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 15
+                                                    anchors.rightMargin: 10
+                                                    spacing: 8
+                                                    Label {
+                                                        Layout.fillWidth: true
+                                                        text: taskCard.modelData.title
+                                                        color: taskCard.modelData.text_color || root.foreground
+                                                        font.pixelSize: 13
+                                                        font.weight: Font.DemiBold
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    Label {
+                                                        visible: Boolean(taskCard.modelData.due)
+                                                        text: root.deadlineText(taskCard.modelData.due)
+                                                        color: taskCard.modelData.text_color || root.secondary
+                                                        font.pixelSize: 11
+                                                    }
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                    onClicked: function(mouse) {
+                                                        if (mouse.button===Qt.RightButton) {
+                                                            root.editTaskId=taskCard.modelData.id
+                                                            taskStyleBackground.text=taskCard.modelData.bg_color || ""
+                                                            taskStyleForeground.text=taskCard.modelData.text_color || ""
+                                                            taskStyleAccent.text=taskCard.modelData.color || ""
+                                                            taskStyle.open()
+                                                        } else root.taskEditor(taskCard.modelData,lanePanel.modelData.id)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        ActionButton {
+                                            width: parent.width
+                                            text: "+ Новая задача"
+                                            onClicked: root.taskEditor(null,lanePanel.modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ColumnLayout {
+                    spacing: 12
+                    Label { text: "Все доски · просроченные, сегодня и два следующих дня"; color: root.secondary; font.pixelSize: 13 }
+                    ListView {
+                        Layout.fillWidth: true; Layout.fillHeight: true
+                        clip: true; spacing: 9
+                        model: root.scheduleData
+                        delegate: Panel {
+                            required property var modelData
+                            width: ListView.view.width
+                            height: 65
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 14; spacing: 16
+                                Label { text: root.deadlineText(modelData.due); color: root.accent; font.bold: true; Layout.preferredWidth: 105 }
+                                Label { text: modelData.title; color: root.foreground; Layout.fillWidth: true; elide: Text.ElideRight }
+                                Label { text: modelData.board_name+" / "+modelData.lane_name; color: root.secondary; font.pixelSize: 12 }
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: root.taskEditor(modelData,modelData.lane_id) }
+                        }
+                    }
+                }
+                RowLayout {
+                    spacing: 14
+                    Panel {
+                        Layout.preferredWidth: 245
+                        Layout.fillHeight: true
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 12
+                            Label { text: "ПАПКИ"; color: root.secondary; font.bold: true }
+                            ListView {
+                                Layout.fillWidth: true; Layout.fillHeight: true
+                                model: root.folderData
+                                delegate: ActionButton {
+                                    required property var modelData
+                                    width: ListView.view.width
+                                    text: modelData.name
+                                    onClicked: { root.folderId=modelData.id; root.noteData=workspace.notes(root.folderId) }
+                                }
+                            }
+                            ActionButton { text: "+ Папка"; onClicked: { promptMode="folder";promptTitle.text="";promptDialog.open() } }
+                        }
+                    }
+                    Panel {
+                        Layout.preferredWidth: 260
+                        Layout.fillHeight: true
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 12
+                            Label { text: "ЗАПИСИ"; color: root.secondary; font.bold: true }
+                            ListView {
+                                Layout.fillWidth: true; Layout.fillHeight: true
+                                model: root.noteData
+                                delegate: ActionButton {
+                                    required property var modelData
+                                    width: ListView.view.width
+                                    text: modelData.title
+                                    onClicked: {
+                                        root.selectedNote=modelData.id
+                                        noteTitle.text=modelData.title
+                                        noteBody.text=modelData.body
+                                    }
+                                }
+                            }
+                            ActionButton { text: "+ Запись"; onClicked: workspace.addNote(root.folderId,"Новая запись","") }
+                        }
+                    }
+                    Panel {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 16; spacing: 12
+                            TextField2 { id: noteTitle; Layout.fillWidth: true; placeholderText: "Название записи" }
+                            TextArea {
+                                id: noteBody
+                                Layout.fillWidth: true; Layout.fillHeight: true
+                                wrapMode: TextEdit.Wrap
+                                color: root.foreground
+                                font.pixelSize: 14
+                                background: Rectangle { color: "#223146"; radius: 10 }
+                            }
+                            RowLayout {
+                                ActionButton { text: "Сохранить"; enabled: root.selectedNote>0; onClicked: workspace.saveNote(root.selectedNote,noteTitle.text,noteBody.text) }
+                                ActionButton { text: "Удалить"; enabled: root.selectedNote>0; onClicked: { workspace.deleteNote(root.selectedNote);root.selectedNote=0;noteTitle.text="";noteBody.text="" } }
+                            }
+                        }
+                    }
+                }
+                Panel {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    ColumnLayout {
+                        anchors.margins: 24; anchors.fill: parent; spacing: 16
+                        Label { text: "Внешний вид рабочего пространства"; color: root.foreground; font.pixelSize: 20 }
+                        Label { text: "Цвета вводятся в формате #RRGGBB. Отдельные цвета колонок и задач задаются в их меню."; color: root.secondary; wrapMode: Text.WordWrap }
+                        Label { text: "Фон приложения"; color: root.secondary }
+                        TextField2 { id: bgInput; text: root.appBg.toString(); Layout.preferredWidth: 240 }
+                        Label { text: "Основной акцент"; color: root.secondary }
+                        TextField2 { id: accentInput; text: root.accent.toString(); Layout.preferredWidth: 240 }
+                        ActionButton {
+                            text: "Применить"
+                            onClicked: {
+                                if (/^#[0-9a-fA-F]{6}$/.test(bgInput.text) && /^#[0-9a-fA-F]{6}$/.test(accentInput.text)) {
+                                    root.appBg=bgInput.text;root.accent=accentInput.text
+                                    workspace.saveAppearance(bgInput.text,accentInput.text)
+                                }
+                            }
+                        }
+                        Item { Layout.fillHeight: true }
+                    }
+                }
+            }
+        }
+    }
+
+    property string promptMode: "board"
+    property int laneSettingsId: 0
+    Dialog {
+        id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
+        width: 400; standardButtons: Dialog.Ok | Dialog.Cancel
+        ColumnLayout { anchors.fill: parent; TextField2 { id: promptTitle; Layout.fillWidth: true; placeholderText: "Название" } }
+        onAccepted: {
+            if (root.promptMode==="board") workspace.addBoard(promptTitle.text)
+            else if (root.promptMode==="lane") workspace.addLane(root.boardId,promptTitle.text)
+            else if (root.promptMode==="folder") workspace.addFolder(promptTitle.text)
+        }
+    }
+    Dialog {
+        id: taskDialog; title: root.editTaskId ? "Редактировать задачу" : "Новая задача"
+        modal: true; anchors.centerIn: parent; width: 550
+        standardButtons: Dialog.Save | Dialog.Cancel
+        ColumnLayout {
+            anchors.fill: parent; spacing: 12
+            TextField2 { id: taskTitle; Layout.fillWidth: true; placeholderText: "Название" }
+            TextArea {
+                id: taskBody; Layout.fillWidth: true; Layout.preferredHeight: 110
+                color: root.foreground; wrapMode: TextEdit.Wrap
+                placeholderText: "Описание"
+                background: Rectangle { color: "#223146"; radius: 9 }
+            }
+            Label { text: "Дедлайн: ГГГГ-ММ-ДД ЧЧ:ММ (пусто — без срока)"; color: root.secondary }
+            TextField2 { id: taskDue; Layout.fillWidth: true; placeholderText: "2026-10-20 14:00" }
+            Label { text: "Цветовой маркер (#RRGGBB)"; color: root.secondary }
+            TextField2 { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+        }
+        onAccepted: {
+            var due=taskDue.text.trim().replace(" ","T")
+            if (root.editTaskId) workspace.saveTask(root.editTaskId,taskTitle.text,taskBody.text,due,taskAccent.text)
+            else workspace.addTask(root.editLaneId,taskTitle.text,taskBody.text,due,taskAccent.text)
+        }
+    }
+    Dialog {
+        id: laneSettings; title: "Оформление колонки"; modal: true; anchors.centerIn: parent; width: 440
+        standardButtons: Dialog.Save | Dialog.Cancel
+        ColumnLayout {
+            anchors.fill: parent; spacing: 12
+            Label { text: "Фон колонки"; color: root.secondary }
+            TextField2 { id: laneBackground; Layout.fillWidth: true; placeholderText: "#192535" }
+            Label { text: "Цвет текста"; color: root.secondary }
+            TextField2 { id: laneForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
+            Label { text: "Цветовой маркер"; color: root.secondary }
+            TextField2 { id: laneAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+            Label { text: "Ширина колонки"; color: root.secondary }
+            Slider { id: laneWidth; from: 250; to: 600; stepSize: 10; Layout.fillWidth: true }
+            Label { text: Math.round(laneWidth.value)+" px"; color: root.foreground }
+            CheckBox { id: laneTimer; text: "Контролировать таймеры этой колонки"; checked: true }
+        }
+        onAccepted: {
+            workspace.styleLane(root.laneSettingsId,laneBackground.text,laneForeground.text,laneAccent.text,Math.round(laneWidth.value))
+            workspace.timerLane(root.laneSettingsId,laneTimer.checked)
+        }
+    }
+    Dialog {
+        id: taskStyle; title: "Оформление карточки"; modal: true; anchors.centerIn: parent; width: 430
+        standardButtons: Dialog.Save | Dialog.Cancel
+        ColumnLayout {
+            anchors.fill: parent; spacing: 12
+            Label { text: "Фон карточки"; color: root.secondary }
+            TextField2 { id: taskStyleBackground; Layout.fillWidth: true; placeholderText: "#25364a" }
+            Label { text: "Цвет текста"; color: root.secondary }
+            TextField2 { id: taskStyleForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
+            Label { text: "Цветовой маркер"; color: root.secondary }
+            TextField2 { id: taskStyleAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+        }
+        onAccepted: workspace.styleTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text)
+    }
+    Dialog {
+        id: alarmDialog; title: "APEX / ТАЙМ-ЛИМИТ"; modal: true
+        closePolicy: Popup.NoAutoClose
+        anchors.centerIn: parent; width: 490
+        ColumnLayout {
+            anchors.fill: parent; spacing: 18
+            Label { text: "ВРЕМЯ ЗАДАЧИ ИСТЕКЛО"; color: "#e8a07c"; font.pixelSize: 19; font.bold: true }
+            Label { id: alarmTitle; color: root.foreground; font.pixelSize: 18; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Label { id: alarmDue; color: root.secondary }
+            RowLayout {
+                ActionButton { text: "Выполнено"; onClicked: { workspace.resolveAlarm(root.alarmTaskId,"done");alarmDialog.close() } }
+                ActionButton { text: "Отложить 15 мин"; onClicked: { workspace.resolveAlarm(root.alarmTaskId,"snooze");alarmDialog.close() } }
+                ActionButton { text: "Открыть"; onClicked: { workspace.resolveAlarm(root.alarmTaskId,"open");alarmDialog.close();root.taskEditor(workspace.task(root.alarmTaskId),0) } }
+            }
+        }
+    }
+}
