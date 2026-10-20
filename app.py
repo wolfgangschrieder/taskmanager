@@ -4,10 +4,10 @@ from theme import STYLE
 from datetime import date
 from PySide6.QtWidgets import QMenu
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from PySide6.QtGui import QKeySequence, QShortcut, QColor, QBrush
 from PySide6.QtCore import Qt, QTimer, QDateTime
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea)
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
@@ -58,7 +58,7 @@ class App(QMainWindow):
     def __init__(self):
         super().__init__();self.setWindowTitle('APEX // TASK CONTROL');self.resize(1300,800)
         self.tabs=QTabWidget();self.setCentralWidget(self.tabs)
-        self.boards=QWidget();self.notes=QWidget();self.control=QWidget();self.tabs.addTab(self.boards,'▦  Доски');self.tabs.addTab(self.notes,'✎  Блокнот');self.tabs.addTab(self.control,'◷  Контроль')
+        self.boards=QWidget();self.notes=QWidget();self.control=QWidget();self.tabs.addTab(self.boards,'▦  Доски');self.tabs.addTab(self.notes,'✎  Блокнот');self.tabs.addTab(self.control,'◷  Расписание')
         self.setup_boards();self.setup_notes();self.setup_control();self.tabs.currentChanged.connect(lambda _:self.refresh_all())
         self.tray=QSystemTrayIcon(self.style().standardIcon(QStyle.SP_MessageBoxInformation),self);self.tray.setToolTip('APEX TASK CONTROL');self.tray.show()
         self.note_dirty=False
@@ -68,6 +68,7 @@ class App(QMainWindow):
         self.note_save_timer=QTimer(self);self.note_save_timer.setSingleShot(True);self.note_save_timer.setInterval(800);self.note_save_timer.timeout.connect(self.save_note)
         self.quick_shortcut=QShortcut(QKeySequence('Ctrl+N'),self);self.quick_shortcut.activated.connect(self.quick_add)
         self.timer=QTimer(self);self.timer.timeout.connect(self.check_due);self.timer.start(15000);self.check_due()
+        self.schedule_timer=QTimer(self);self.schedule_timer.timeout.connect(self.refresh_control);self.schedule_timer.start(30000)
         self.setStyleSheet(STYLE)
         self.statusBar().showMessage('Готово • данные сохраняются локально')
     def setup_boards(self):
@@ -91,8 +92,8 @@ class App(QMainWindow):
         self.clear_layout(self.lanes);bid=self.board_pick.currentData()
         if bid is None:return
         for lane in rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(bid,)):
-            panel=QWidget();v=QVBoxLayout(panel);header=QPushButton('●  '+lane['name']+'  ⋯')
-            header.setToolTip('Переименовать, изменить цвет или удалить колонку')
+            panel=QWidget();v=QVBoxLayout(panel);header=QPushButton(('●  ' if lane['timer_enabled'] else '◌  ')+lane['name']+('  ⋯' if lane['timer_enabled'] else '  · таймеры выкл.  ⋯'))
+            header.setToolTip('Переименовать, цвет, включить или выключить контроль сроков')
             header.clicked.connect(lambda _,lid=lane['id']:self.lane_menu(lid))
             if lane['color']:header.setStyleSheet('color: '+lane['color']+';')
             v.addWidget(header)
@@ -168,7 +169,7 @@ class App(QMainWindow):
     def lane_menu(self,lid):
         lane=rows('SELECT * FROM lanes WHERE id=?',(lid,))
         if not lane:return
-        lane=lane[0];menu=QMenu(self);rename=menu.addAction('Переименовать');color=menu.addAction('Выбрать цвет');delete=menu.addAction('Удалить колонку…')
+        lane=lane[0];menu=QMenu(self);rename=menu.addAction('Переименовать');color=menu.addAction('Выбрать цвет');toggle=menu.addAction('Выключить контроль таймеров' if lane['timer_enabled'] else 'Включить контроль таймеров');delete=menu.addAction('Удалить колонку…')
         action=menu.exec(self.cursor().pos())
         if action==rename:
             name,ok=QInputDialog.getText(self,'Название колонки','Название:',text=lane['name'])
@@ -176,6 +177,9 @@ class App(QMainWindow):
         elif action==color:
             value=self.ask_color(lane['color'])
             if value:run('UPDATE lanes SET color=? WHERE id=?',(value,lid));self.refresh_board()
+        elif action==toggle:
+            run('UPDATE lanes SET timer_enabled=? WHERE id=?',(0 if lane['timer_enabled'] else 1,lid))
+            self.refresh_all()
         elif action==delete:
             count=rows('SELECT COUNT(*) AS n FROM tasks WHERE lane_id=?',(lid,))[0]['n']
             if self.confirm_delete('колонку и все её карточки',count):
@@ -310,17 +314,95 @@ class App(QMainWindow):
         self.note_dirty=False
         self.refresh_notes()
     def setup_control(self):
-        v=QVBoxLayout(self.control);v.addWidget(QLabel('Задачи с напоминаниями'));self.due_list=QListWidget();self.due_list.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));v.addWidget(self.due_list);b=QPushButton('Обновить');b.clicked.connect(self.refresh_control);v.addWidget(b);self.refresh_control()
+        layout=QVBoxLayout(self.control)
+        heading=QLabel('РАСПИСАНИЕ  /  БЛИЖАЙШИЕ ДНИ')
+        heading.setStyleSheet('font-size:17px;font-weight:600;padding:8px')
+        layout.addWidget(heading)
+        description=QLabel('Все доски · сегодня и два следующих дня · ближайшие задачи выше')
+        description.setStyleSheet('color:#9eafc5;padding-left:8px')
+        layout.addWidget(description)
+        self.schedule_summary=QLabel()
+        layout.addWidget(self.schedule_summary)
+        self.schedule_scroll=QScrollArea()
+        self.schedule_scroll.setWidgetResizable(True)
+        self.schedule_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.schedule_content=QWidget()
+        self.schedule_layout=QVBoxLayout(self.schedule_content)
+        self.schedule_layout.setSpacing(12)
+        self.schedule_scroll.setWidget(self.schedule_content)
+        layout.addWidget(self.schedule_scroll)
+        refresh=QPushButton('↻ Обновить расписание')
+        refresh.clicked.connect(self.refresh_control)
+        layout.addWidget(refresh)
+        self.refresh_control()
+
     def refresh_control(self):
-        self.due_list.clear()
-        for t in rows('SELECT * FROM tasks WHERE due IS NOT NULL ORDER BY due'):
-            item=QListWidgetItem(f"{t['due'].replace('T',' ')}  |  {t['title']}");item.setData(Qt.UserRole,t['id']);self.due_list.addItem(item)
-    def refresh_all(self):self.refresh_board();self.refresh_control()
+        if not hasattr(self,'schedule_layout'):return
+        self.clear_layout(self.schedule_layout)
+        now=datetime.now()
+        end=datetime.combine(now.date()+timedelta(days=3),time.min)
+        records=rows("""SELECT tasks.*, lanes.name AS lane_name,
+            lanes.timer_enabled, boards.name AS board_name
+            FROM tasks JOIN lanes ON lanes.id=tasks.lane_id
+            JOIN boards ON boards.id=lanes.board_id
+            WHERE tasks.due IS NOT NULL AND lanes.timer_enabled=1
+            ORDER BY tasks.due ASC, tasks.id ASC""")
+        groups={'Просроченные':[], 'Сегодня':[], 'Завтра':[], 'Послезавтра':[]}
+        for task in records:
+            try:due=datetime.fromisoformat(task['due'])
+            except (ValueError,TypeError):continue
+            if due<now:group='Просроченные'
+            elif due>=end:continue
+            else:
+                day=(due.date()-now.date()).days
+                group=['Сегодня','Завтра','Послезавтра'][day]
+            groups[group].append((task,due))
+        total=sum(map(len,groups.values()))
+        self.schedule_summary.setText(f'   {total} задач · просрочено: {len(groups["Просроченные"])}')
+        self.schedule_summary.setStyleSheet('color:#a7c5e9;padding:8px')
+        if total==0:
+            empty=QLabel('На ближайшие дни задач с активными таймерами нет ✨')
+            empty.setStyleSheet('color:#a5b8cd;padding:28px')
+            self.schedule_layout.addWidget(empty)
+        for group,items in groups.items():
+            if not items:continue
+            title=QLabel(group.upper()+f'   ·   {len(items)}')
+            title.setStyleSheet('font-weight:600;font-size:14px;color:#a9bed7;padding:8px')
+            self.schedule_layout.addWidget(title)
+            for task,due in items:
+                delta=due-now
+                if delta.total_seconds()<0:
+                    minutes=int(abs(delta.total_seconds())//60)
+                    relative=f'Просрочено на {minutes} мин'
+                else:
+                    minutes=max(0,int(delta.total_seconds()//60))
+                    relative=f'Через {minutes} мин' if minutes<60 else f'Через {minutes//60} ч {minutes%60} мин'
+                text=f'  {due:%H:%M}     {task["title"]}\n  {task["board_name"]}  /  {task["lane_name"]}     ·     {relative}'
+                button=QPushButton(text)
+                button.setMinimumHeight(66)
+                button.setToolTip('Нажмите, чтобы открыть карточку')
+                button.setStyleSheet('QPushButton{text-align:left;background:#202c3c;border:1px solid #34465c;border-left:4px solid '+(task['color'] or ('#f19b9b' if group=='Просроченные' else '#8ac9e8'))+';border-radius:9px;padding:10px;color:#eef4fb} QPushButton:hover{background:#2d4055}')
+                button.clicked.connect(lambda _,tid=task['id']:self.edit_task(tid))
+                self.schedule_layout.addWidget(button)
+        self.schedule_layout.addStretch(1)
+
+    def refresh_all(self):
+        self.refresh_board()
+        self.refresh_control()
+
     def check_due(self):
         now=datetime.now().isoformat(timespec='minutes')
-        for t in rows('SELECT * FROM tasks WHERE due IS NOT NULL AND due<=? AND reminded=0',(now,)):
-            self.tray.showMessage('APEX: пора проверить задачу',t['title'],QSystemTrayIcon.Information,12000)
+        for t in rows("""SELECT tasks.* FROM tasks
+            JOIN lanes ON lanes.id=tasks.lane_id
+            WHERE tasks.due IS NOT NULL AND tasks.due<=?
+            AND tasks.reminded=0 AND lanes.timer_enabled=1
+            ORDER BY tasks.due""",(now,)):
+            if self.tray.supportsMessages():
+                self.tray.showMessage('APEX: пора проверить задачу',t['title'],QSystemTrayIcon.Information,12000)
+            else:
+                self.statusBar().showMessage('⏰ '+t['title'],15000)
             run('UPDATE tasks SET reminded=1 WHERE id=?',(t['id'],))
+        if self.tabs.currentWidget()==self.control:self.refresh_control()
     def quick_add(self):
         self.tabs.setCurrentWidget(self.boards)
         bid=self.board_pick.currentData()
