@@ -111,7 +111,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 18
                 spacing: 13
-                Label { text: "MANAGER"; color: root.foreground; font.pixelSize: 24; font.bold: true }\n                Label { text: "HELPER  /  v1.1"; color: root.accent; font.pixelSize: 13; font.bold: true }
+                Label { text: "MANAGER"; color: root.foreground; font.pixelSize: 24; font.bold: true }
+                Label { text: "HELPER  /  v1.1"; color: root.accent; font.pixelSize: 13; font.bold: true }
                 Label { text: "PERSONAL WORKSPACE"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { Layout.preferredHeight: 14 }
                 Repeater {
