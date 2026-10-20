@@ -262,8 +262,16 @@ def main():
     engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("ui2.qml"))))
     if not engine.rootObjects():
         raise RuntimeError("Unable to load ui2.qml")
+    screenshot_path=os.environ.get('MANAGER_HELPER_SCREENSHOT')
+    if screenshot_path:
+        def capture():
+            window=engine.rootObjects()[0]
+            image=window.grabWindow()
+            if image.isNull() or not image.save(screenshot_path):
+                raise RuntimeError('Could not capture QML window screenshot')
+        QTimer.singleShot(1000, capture)
     if os.environ.get('APEX_SMOKE_TEST') == '1':
-        QTimer.singleShot(1500, app.quit)
+        QTimer.singleShot(1800, app.quit)
     app.exec()
 
 
