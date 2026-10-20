@@ -6,8 +6,8 @@ from PySide6.QtWidgets import QMenu
 from pathlib import Path
 from datetime import datetime, timedelta, time
 from PySide6.QtGui import QKeySequence, QShortcut, QColor, QBrush
-from PySide6.QtCore import Qt, QTimer, QDateTime
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea,QSpinBox)
+from PySide6.QtCore import Qt, QTimer, QDateTime, QSize
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea,QSpinBox,QFrame,QSizePolicy)
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
@@ -125,7 +125,7 @@ class App(QMainWindow):
         lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
         options=QPushButton('⋯ Доска');options.clicked.connect(self.board_menu);top.addWidget(options)
         top.addStretch();settings=QPushButton('Настройки вида');settings.clicked.connect(self.show_settings);top.addWidget(settings);lay.addLayout(top)
-        self.lanes=QHBoxLayout();lay.addLayout(self.lanes,1);self.refresh_boards()
+        self.lanes=QHBoxLayout();self.lanes.setSpacing(14);lay.addLayout(self.lanes,1);self.refresh_boards()
     def refresh_boards(self):
         selected=self.board_pick.currentData();self.board_pick.blockSignals(True);self.board_pick.clear()
         for b in rows('SELECT * FROM boards ORDER BY id'):self.board_pick.addItem(b['name'],b['id'])
@@ -142,29 +142,80 @@ class App(QMainWindow):
         self.clear_layout(self.lanes);bid=self.board_pick.currentData()
         if bid is None:return
         for lane in rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(bid,)):
-            panel=QWidget();v=QVBoxLayout(panel);header=QPushButton(('●  ' if lane['timer_enabled'] else '◌  ')+lane['name']+('  ⋯' if lane['timer_enabled'] else '  · таймеры выкл.  ⋯'))
-            header.setToolTip('Переименовать, цвет, включить или выключить контроль сроков')
+            panel=QFrame()
+            panel.setObjectName('lanePanel')
+            panel.setMinimumWidth(245)
+            v=QVBoxLayout(panel)
+            v.setContentsMargins(12,12,12,12)
+            v.setSpacing(10)
+            tasks=rows('SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id',(lane['id'],))
+            header=QPushButton(('●  ' if lane['timer_enabled'] else '○  ')+lane['name']+'   '+str(len(tasks))+'   ···')
+            header.setObjectName('laneHeader')
+            header.setToolTip('Настройки колонки и контроль таймеров')
             header.clicked.connect(lambda _,lid=lane['id']:self.lane_menu(lid))
-            if lane['color']:header.setStyleSheet('color: '+lane['color']+';')
+            if lane['color']:header.setStyleSheet('border-left:3px solid '+lane['color']+';')
             v.addWidget(header)
-            lst=TaskList(lane['id']);lst.setMinimumWidth(210);lst.moved.connect(self.drop_task)
-            for task in rows('SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id',(lane['id'],)):
-                label=task['title']
-                if task['due']:
-                    try:
-                        deadline=datetime.fromisoformat(task['due'])
-                        label+='\nСрок: '+deadline.strftime('%d.%m %H:%M')
-                        if deadline<datetime.now():label+='  ·  ПРОСРОЧЕНО'
-                    except ValueError:label+='\nСрок: '+task['due']
-                item=QListWidgetItem(label);item.setData(Qt.UserRole,task['id']);lst.addItem(item)
-                if task['color']:
-                    tint=QColor(task['color']);tint.setAlpha(45)
-                    item.setBackground(QBrush(tint))
-                    item.setForeground(QBrush(QColor(task['color'])))
-            lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);lst.customContextMenuRequested.connect(lambda point,l=lst:self.task_menu(l,point));v.addWidget(lst,1)
-            add=QPushButton('+ Карточка');add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid));v.addWidget(add)
-            move=QPushButton('Переместить выбранную →');move.clicked.connect(lambda _,l=lst,lid=lane['id']:self.move_task(l,lid));v.addWidget(move)
+            lst=TaskList(lane['id'])
+            lst.setObjectName('kanbanList')
+            lst.setMinimumWidth(210)
+            lst.setSpacing(9)
+            lst.moved.connect(self.drop_task)
+            light=self.settings.get('theme')=='Светлая' if hasattr(self,'settings') else False
+            accent=ACCENTS.get(self.settings.get('accent','Синий'),'#5c96d8') if hasattr(self,'settings') else '#5c96d8'
+            for task in tasks:
+                item=QListWidgetItem()
+                item.setData(Qt.UserRole,task['id'])
+                lst.addItem(item)
+                card=self.make_task_card(task,accent,light)
+                item.setSizeHint(card.sizeHint()+QSize(0,6))
+                lst.setItemWidget(item,card)
+            lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)))
+            lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            lst.customContextMenuRequested.connect(lambda point,l=lst:self.task_menu(l,point))
+            v.addWidget(lst,1)
+            add=QPushButton('+ Новая задача')
+            add.setObjectName('addTaskButton')
+            add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid))
+            v.addWidget(add)
             self.lanes.addWidget(panel,1)
+
+    def make_task_card(self,task,accent,light):
+        card=QFrame()
+        card.setObjectName('taskCard')
+        surface='#ffffff' if light else '#253447'
+        border='#d7e0eb' if light else '#35475d'
+        foreground='#223246' if light else '#eef4fa'
+        secondary='#68798d' if light else '#b4c4d6'
+        color=task['color'] or accent
+        card.setStyleSheet(
+            f'QFrame#taskCard{{background:{surface};border:1px solid {border};'
+            f'border-left:4px solid {color};border-radius:10px;}}'
+            f'QFrame#taskCard QLabel{{background:transparent;border:0;}}')
+        layout=QVBoxLayout(card)
+        layout.setContentsMargins(13,12,11,12)
+        layout.setSpacing(7)
+        title=QLabel(task['title'])
+        title.setWordWrap(True)
+        title.setStyleSheet(f'font-weight:600;color:{foreground};')
+        layout.addWidget(title)
+        details=[]
+        if task['due']:
+            try:
+                due=datetime.fromisoformat(task['due'])
+                prefix='ПРОСРОЧЕНО' if due<datetime.now() else 'ДО'
+                details.append(prefix+'  '+due.strftime('%d.%m  %H:%M'))
+            except ValueError:pass
+        try:
+            checklist=json.loads(task['checklist'] or '[]')
+            if checklist:details.append('ПУНКТОВ  '+str(len(checklist)))
+        except (ValueError,TypeError):pass
+        if details:
+            meta=QLabel('     ·     '.join(details))
+            meta.setWordWrap(True)
+            meta.setStyleSheet(f'color:{secondary};font-size:11px;font-weight:500;')
+            layout.addWidget(meta)
+        return card
+
     def drop_task(self, task_id, lane_id, index):
         # Rebuild positions atomically; the source and destination may coincide.
         task=con.execute('SELECT lane_id FROM tasks WHERE id=?',(task_id,)).fetchone()
