@@ -69,24 +69,25 @@ class TaskDialog(QDialog):
     def selected_color(self):return self.color.currentData()
 class CardDelegate(QStyledItemDelegate):
     """Paints each task directly: no nested widget geometry or clipping."""
-    def __init__(self, parent=None, accent='#5c96d8', light=False):
+    def __init__(self, parent=None, accent='#5c96d8', light=False, card_bg=None):
         super().__init__(parent)
         self.accent=accent
         self.light=light
+        self.card_bg=card_bg
 
     def sizeHint(self, option, index):
         title=str(index.data(Qt.ItemDataRole.DisplayRole) or '')
         width=max(170,option.rect.width()-32)
         metrics=QFontMetrics(option.font)
         lines=max(1,metrics.boundingRect(0,0,width-28,1000,Qt.TextFlag.TextWordWrap,title).height()//max(1,metrics.lineSpacing())+1)
-        return QSize(width,max(90,54+lines*metrics.lineSpacing()))
+        return QSize(width,58)
 
     def paint(self,painter,option,index):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect=option.rect.adjusted(3,4,-3,-4)
         selected=bool(option.state & QStyle.StateFlag.State_Selected)
-        surface='#ffffff' if self.light else '#253447'
+        surface=self.card_bg if hasattr(self,'card_bg') and self.card_bg else ('#ffffff' if self.light else '#253447')
         border=self.accent if selected else ('#d7e0eb' if self.light else '#3b4c60')
         painter.setPen(QPen(QColor(border),2 if selected else 1))
         painter.setBrush(QColor(surface))
@@ -102,14 +103,20 @@ class CardDelegate(QStyledItemDelegate):
         font=option.font
         font.setBold(True)
         painter.setFont(font)
-        text_rect=rect.adjusted(17,12,-12,-34)
-        painter.drawText(text_rect,Qt.TextFlag.TextWordWrap|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop,title)
-        painter.setPen(QColor(muted))
-        font.setBold(False)
-        font.setPointSizeF(max(8,font.pointSizeF()-1))
-        painter.setFont(font)
-        meta=index.data(Qt.ItemDataRole.UserRole+2) or ''
-        painter.drawText(rect.adjusted(17,0,-10,-10),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignBottom,str(meta))
+        meta=str(index.data(Qt.ItemDataRole.UserRole+2) or '')
+        right_width=130 if meta else 0
+        title_width=max(50,rect.width()-38-right_width)
+        metrics=QFontMetrics(font)
+        title=metrics.elidedText(title,Qt.TextElideMode.ElideRight,title_width)
+        painter.drawText(rect.left()+17,rect.top(),title_width,rect.height(),
+                         Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,title)
+        if meta:
+            painter.setPen(QColor(muted))
+            font.setBold(False)
+            font.setPointSizeF(max(8,font.pointSizeF()-1))
+            painter.setFont(font)
+            painter.drawText(rect.right()-right_width-9,rect.top(),right_width,rect.height(),
+                             Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter,meta)
         painter.restore()
 
 class App(QMainWindow):
@@ -170,7 +177,7 @@ class App(QMainWindow):
         lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
         options=QPushButton('⋯ Доска');options.clicked.connect(self.board_menu);top.addWidget(options)
         top.addStretch();settings=QPushButton('Настройки вида');settings.clicked.connect(self.show_settings);top.addWidget(settings);lay.addLayout(top)
-        self.lanes=QHBoxLayout();self.lanes.setSpacing(14);lay.addLayout(self.lanes,1);self.refresh_boards()
+        self.lanes=QHBoxLayout();self.lanes.setSpacing(14);self.lanes.setAlignment(Qt.AlignmentFlag.AlignLeft);lay.addLayout(self.lanes,1);self.refresh_boards()
     def refresh_boards(self):
         selected=self.board_pick.currentData();self.board_pick.blockSignals(True);self.board_pick.clear()
         for b in rows('SELECT * FROM boards ORDER BY id'):self.board_pick.addItem(b['name'],b['id'])
@@ -189,7 +196,7 @@ class App(QMainWindow):
         for lane in rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(bid,)):
             panel=QFrame()
             panel.setObjectName('lanePanel')
-            panel.setMinimumWidth(245)
+            panel.setFixedWidth(340)
             v=QVBoxLayout(panel)
             v.setContentsMargins(12,12,12,12)
             v.setSpacing(10)
@@ -207,22 +214,18 @@ class App(QMainWindow):
             lst.moved.connect(self.drop_task)
             light=self.settings.get('theme')=='Светлая' if hasattr(self,'settings') else False
             accent=ACCENTS.get(self.settings.get('accent','Синий'),'#5c96d8') if hasattr(self,'settings') else '#5c96d8'
-            lst.setItemDelegate(CardDelegate(lst,accent,light))
+            lst.setItemDelegate(CardDelegate(lst,accent,light,self.settings.get('card_bg')))
             for task in tasks:
                 item=QListWidgetItem(task['title'])
                 item.setData(Qt.UserRole,task['id'])
                 item.setData(Qt.UserRole+1,task['color'] or accent)
-                details=[]
+                deadline=''
                 if task['due']:
                     try:
                         due=datetime.fromisoformat(task['due'])
-                        details.append(('ПРОСРОЧЕНО  ' if due<datetime.now() else 'ДО  ')+due.strftime('%d.%m %H:%M'))
+                        deadline=('ПРОСРОЧЕНО ' if due<datetime.now() else '')+due.strftime('%d.%m %H:%M')
                     except ValueError:pass
-                try:
-                    checks=json.loads(task['checklist'] or '[]')
-                    if checks:details.append('ПУНКТОВ  '+str(len(checks)))
-                except (ValueError,TypeError):pass
-                item.setData(Qt.UserRole+2,'   ·   '.join(details))
+                item.setData(Qt.UserRole+2,deadline)
                 lst.addItem(item)
             lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)))
             lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -232,7 +235,7 @@ class App(QMainWindow):
             add.setObjectName('addTaskButton')
             add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid))
             v.addWidget(add)
-            self.lanes.addWidget(panel,1)
+            self.lanes.addWidget(panel,0)
 
     def drop_task(self, task_id, lane_id, index):
         # Rebuild positions atomically; the source and destination may coincide.
