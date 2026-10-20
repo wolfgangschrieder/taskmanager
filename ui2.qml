@@ -90,6 +90,7 @@ ApplicationWindow {
     }
     component TextField2: TextField {
         color: root.foreground
+        placeholderTextColor: "#9bb0ca"
         selectionColor: root.accent
         font.pixelSize: 14
         background: Rectangle {
@@ -400,7 +401,7 @@ ApplicationWindow {
 
     property string promptMode: "board"
     property int laneSettingsId: 0
-    Dialog {
+    StyledDialog {
         id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
         width: 400; standardButtons: Dialog.Ok | Dialog.Cancel
         ColumnLayout { anchors.fill: parent; TextField2 { id: promptTitle; Layout.fillWidth: true; placeholderText: "Название" } }
@@ -410,7 +411,7 @@ ApplicationWindow {
             else if (root.promptMode==="folder") workspace.addFolder(promptTitle.text)
         }
     }
-    Dialog {
+    StyledDialog {
         id: taskDialog; title: root.editTaskId ? "Редактировать задачу" : "Новая задача"
         modal: true; anchors.centerIn: parent; width: 550
         standardButtons: Dialog.Save | Dialog.Cancel
@@ -420,6 +421,8 @@ ApplicationWindow {
             TextArea {
                 id: taskBody; Layout.fillWidth: true; Layout.preferredHeight: 110
                 color: root.foreground; wrapMode: TextEdit.Wrap
+                placeholderTextColor: "#9bb0ca"
+                font.pixelSize: 14
                 placeholderText: "Описание"
                 background: Rectangle { color: "#223146"; radius: 9 }
             }
@@ -434,7 +437,7 @@ ApplicationWindow {
             else workspace.addTask(root.editLaneId,taskTitle.text,taskBody.text,due,taskAccent.text)
         }
     }
-    Dialog {
+    StyledDialog {
         id: laneSettings; title: "Оформление колонки"; modal: true; anchors.centerIn: parent; width: 440
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
@@ -455,7 +458,7 @@ ApplicationWindow {
             workspace.timerLane(root.laneSettingsId,laneTimer.checked)
         }
     }
-    Dialog {
+    StyledDialog {
         id: taskStyle; title: "Настройки карточки"; modal: true; anchors.centerIn: parent; width: 430
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
@@ -472,7 +475,7 @@ ApplicationWindow {
         }
         onAccepted: workspace.configureTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text,taskStyleTelegram.text)
     }
-    Dialog {
+    StyledDialog {
         id: alarmDialog; title: "MANAGER HELPER / ТАЙМ-ЛИМИТ"; modal: true
         closePolicy: Popup.NoAutoClose
         anchors.centerIn: parent; width: 490
