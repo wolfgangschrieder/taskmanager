@@ -1,4 +1,4 @@
-"""APEX UI 2.0 data bridge. Keeps the existing SQLite database untouched."""
+"""Manager Helper v1.1 desktop workspace bridge."""
 import json
 import os
 import sqlite3
