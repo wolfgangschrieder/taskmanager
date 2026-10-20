@@ -61,8 +61,8 @@ Dialog {
         spacing: 12
         background: Rectangle { color: "transparent" }
         standardButtons: dialog.standardButtons
-        onAccepted: dialog.accept()
-        onRejected: dialog.reject()
+        // DialogButtonBox is connected to Dialog automatically
+
         delegate: Button {
             id: actionButton
             implicitWidth: 128
