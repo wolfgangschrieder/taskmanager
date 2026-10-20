@@ -230,7 +230,7 @@ ApplicationWindow {
                                                 RowLayout {
                                                     anchors.fill: parent
                                                     anchors.leftMargin: 15
-                                                    anchors.rightMargin: 10
+                                                    anchors.rightMargin: taskCard.modelData.telegram_url ? 113 : 10
                                                     spacing: 8
                                                     Label {
                                                         Layout.fillWidth: true
@@ -249,6 +249,7 @@ ApplicationWindow {
                                                 }
                                                 MouseArea {
                                                     anchors.fill: parent
+                                                    anchors.rightMargin: taskCard.modelData.telegram_url ? 108 : 0
                                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                                     onClicked: function(mouse) {
                                                         if (mouse.button===Qt.RightButton) {
@@ -256,9 +257,20 @@ ApplicationWindow {
                                                             taskStyleBackground.text=taskCard.modelData.bg_color || ""
                                                             taskStyleForeground.text=taskCard.modelData.text_color || ""
                                                             taskStyleAccent.text=taskCard.modelData.color || ""
+                                                            taskStyleTelegram.text=taskCard.modelData.telegram_url || ""
                                                             taskStyle.open()
                                                         } else root.taskEditor(taskCard.modelData,lanePanel.modelData.id)
                                                     }
+                                                }
+                                                ActionButton {
+                                                    visible: Boolean(taskCard.modelData.telegram_url)
+                                                    text: "К задаче ↗"
+                                                    width: 101
+                                                    height: 34
+                                                    anchors.right: parent.right
+                                                    anchors.rightMargin: 9
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    onClicked: workspace.openTelegram(taskCard.modelData.telegram_url)
                                                 }
                                             }
                                         }
@@ -444,7 +456,7 @@ ApplicationWindow {
         }
     }
     Dialog {
-        id: taskStyle; title: "Оформление карточки"; modal: true; anchors.centerIn: parent; width: 430
+        id: taskStyle; title: "Настройки карточки"; modal: true; anchors.centerIn: parent; width: 430
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
             anchors.fill: parent; spacing: 12
@@ -454,8 +466,11 @@ ApplicationWindow {
             TextField2 { id: taskStyleForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
             Label { text: "Цветовой маркер"; color: root.secondary }
             TextField2 { id: taskStyleAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+            Label { text: "Ссылка Telegram на сообщение или чат"; color: root.secondary }
+            TextField2 { id: taskStyleTelegram; Layout.fillWidth: true; placeholderText: "https://t.me/c/123456789/42" }
+            Label { text: "На карточке появится кнопка «К задаче». Пустое поле убирает кнопку."; color: root.secondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         }
-        onAccepted: workspace.styleTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text)
+        onAccepted: workspace.configureTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text,taskStyleTelegram.text)
     }
     Dialog {
         id: alarmDialog; title: "MANAGER HELPER / ТАЙМ-ЛИМИТ"; modal: true
