@@ -184,8 +184,8 @@ ApplicationWindow {
                                 delegate: Panel {
                                     id: lanePanel
                                     required property var modelData
-                                    width: Math.max(250,Math.min(600,modelData.width || 320))
-                                    height: Math.min(boardScroll.height - 8, Math.max(190, laneColumn.implicitHeight+24))
+                                    width: Math.max(270,Math.min(600,Math.max(modelData.width || 320, (boardScroll.width - 18 * Math.max(0,root.laneData.length-1)) / Math.max(1,root.laneData.length))))
+                                    height: Math.max(190, Math.min(boardScroll.height - 8, laneColumn.implicitHeight+24))
                                     color: modelData.bg_color || root.surface
                                     Column {
                                         id: laneColumn
