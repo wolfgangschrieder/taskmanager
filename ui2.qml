@@ -9,7 +9,7 @@ ApplicationWindow {
     visibility: Window.Maximized
     minimumWidth: 900
     minimumHeight: 640
-    title: "APEX // TASK CONTROL 2.0"
+    title: "MANAGER HELPER // 1.1"
     color: appBg
     property color appBg: "#101923"
     property color surface: "#192535"
@@ -111,8 +111,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 18
                 spacing: 13
-                Label { text: "APEX"; color: root.foreground; font.pixelSize: 28; font.bold: true }
-                Label { text: "TASK CONTROL / WORKSPACE"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 1 }
+                Label { text: "MANAGER"; color: root.foreground; font.pixelSize: 24; font.bold: true }\n                Label { text: "HELPER  /  v1.1"; color: root.accent; font.pixelSize: 13; font.bold: true }
+                Label { text: "PERSONAL WORKSPACE"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { Layout.preferredHeight: 14 }
                 Repeater {
                     model: ["Доски","Расписание","Блокнот","Оформление"]
@@ -455,7 +455,7 @@ ApplicationWindow {
         onAccepted: workspace.styleTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text)
     }
     Dialog {
-        id: alarmDialog; title: "APEX / ТАЙМ-ЛИМИТ"; modal: true
+        id: alarmDialog; title: "MANAGER HELPER / ТАЙМ-ЛИМИТ"; modal: true
         closePolicy: Popup.NoAutoClose
         anchors.centerIn: parent; width: 490
         ColumnLayout {
