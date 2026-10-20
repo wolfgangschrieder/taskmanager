@@ -11,4 +11,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile Python sources
-        run: python -m compileall -q app.py
+        run: python -m compileall -q app.py board_widgets.py theme.py
