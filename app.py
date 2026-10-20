@@ -34,6 +34,14 @@ for table in ('tasks','notes','folders','boards','lanes'):
 lane_columns={row['name'] for row in con.execute('PRAGMA table_info(lanes)')}
 if 'timer_enabled' not in lane_columns:
     con.execute('ALTER TABLE lanes ADD COLUMN timer_enabled INTEGER NOT NULL DEFAULT 1')
+for table in ('lanes','tasks'):
+    cols={r['name'] for r in con.execute(f'PRAGMA table_info({table})')}
+    for col,definition in [('bg_color',"TEXT DEFAULT ''"),('text_color',"TEXT DEFAULT ''")]:
+        if col not in cols:
+            con.execute(f'ALTER TABLE {table} ADD COLUMN {col} {definition}')
+lane_cols={r['name'] for r in con.execute('PRAGMA table_info(lanes)')}
+if 'width' not in lane_cols:
+    con.execute('ALTER TABLE lanes ADD COLUMN width INTEGER DEFAULT 320')
 if first_run and not con.execute('SELECT 1 FROM boards').fetchone():
     con.execute('INSERT INTO boards(name) VALUES(?)',('Работа',)); bid=con.execute('SELECT last_insert_rowid()').fetchone()[0]
     for i,n in enumerate(['Входящие','В работе','Ожидание','Готово']):con.execute('INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)',(bid,n,i))
@@ -87,7 +95,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect=option.rect.adjusted(3,4,-3,-4)
         selected=bool(option.state & QStyle.StateFlag.State_Selected)
-        surface=self.card_bg if hasattr(self,'card_bg') and self.card_bg else ('#ffffff' if self.light else '#253447')
+        surface=index.data(Qt.ItemDataRole.UserRole+3) or (self.card_bg if hasattr(self,'card_bg') and self.card_bg else ('#ffffff' if self.light else '#253447'))
         border=self.accent if selected else ('#d7e0eb' if self.light else '#3b4c60')
         painter.setPen(QPen(QColor(border),2 if selected else 1))
         painter.setBrush(QColor(surface))
@@ -96,7 +104,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(color))
         painter.drawRoundedRect(QRectF(rect.left()+1,rect.top()+7,4,rect.height()-14),2,2)
-        fg='#253449' if self.light else '#f1f5fb'
+        fg=index.data(Qt.ItemDataRole.UserRole+4) or ('#253449' if self.light else '#f1f5fb')
         muted='#66788c' if self.light else '#afc1d4'
         title=str(index.data(Qt.ItemDataRole.DisplayRole) or '')
         painter.setPen(QColor(fg))
@@ -111,7 +119,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.drawText(rect.left()+17,rect.top(),title_width,rect.height(),
                          Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,title)
         if meta:
-            painter.setPen(QColor(muted))
+            painter.setPen(QColor(fg if index.data(Qt.ItemDataRole.UserRole+4) else muted))
             font.setBold(False)
             font.setPointSizeF(max(8,font.pointSizeF()-1))
             painter.setFont(font)
@@ -187,7 +195,7 @@ class App(QMainWindow):
             self.apply_theme()
 
     def setup_boards(self):
-        lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
+        lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.setMinimumWidth(200);self.board_pick.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon);self.board_pick.setMinimumContentsLength(20);self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
         options=QPushButton('⋯ Доска');options.clicked.connect(self.board_menu);top.addWidget(options)
         top.addStretch();settings=QPushButton('Настройки вида');settings.clicked.connect(self.show_settings);top.addWidget(settings);lay.addLayout(top)
         self.lanes=QHBoxLayout();self.lanes.setSpacing(14);self.lanes.setAlignment(Qt.AlignmentFlag.AlignLeft);lay.addLayout(self.lanes,1);self.refresh_boards()
@@ -196,7 +204,9 @@ class App(QMainWindow):
         for b in rows('SELECT * FROM boards ORDER BY id'):self.board_pick.addItem(b['name'],b['id'])
         idx=self.board_pick.findData(selected)
         if idx>=0:self.board_pick.setCurrentIndex(idx)
-        self.board_pick.blockSignals(False);self.refresh_board()
+        self.board_pick.blockSignals(False)
+        self.board_pick.view().setMinimumWidth(max(260,self.board_pick.sizeHint().width()))
+        self.refresh_board()
     def clear_layout(self,layout):
         while layout.count():
             item=layout.takeAt(0)
@@ -209,7 +219,9 @@ class App(QMainWindow):
         for lane in rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(bid,)):
             panel=QFrame()
             panel.setObjectName('lanePanel')
-            panel.setFixedWidth(340)
+            panel.setFixedWidth(max(240,min(720,lane['width'] or 320)))
+            if lane['bg_color']:
+                panel.setStyleSheet('QFrame#lanePanel {background:'+lane['bg_color']+';border-radius:12px;}')
             v=QVBoxLayout(panel)
             v.setContentsMargins(12,12,12,12)
             v.setSpacing(10)
@@ -218,7 +230,8 @@ class App(QMainWindow):
             header.setObjectName('laneHeader')
             header.setToolTip('Настройки колонки и контроль таймеров')
             header.clicked.connect(lambda _,lid=lane['id']:self.lane_menu(lid))
-            if lane['color']:header.setStyleSheet('border-left:3px solid '+lane['color']+';')
+            if lane['text_color']:
+                header.setStyleSheet('QPushButton#laneHeader {color:'+lane['text_color']+';}')
             v.addWidget(header)
             lst=TaskList(lane['id'])
             lst.setObjectName('kanbanList')
@@ -239,6 +252,8 @@ class App(QMainWindow):
                         deadline=('ПРОСРОЧЕНО ' if due<datetime.now() else '')+due.strftime('%d.%m %H:%M')
                     except ValueError:pass
                 item.setData(Qt.UserRole+2,deadline)
+                item.setData(Qt.UserRole+3,task['bg_color'] or '')
+                item.setData(Qt.UserRole+4,task['text_color'] or '')
                 lst.addItem(item)
             lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)))
             lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
