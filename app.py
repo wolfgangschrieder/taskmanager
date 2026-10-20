@@ -5,9 +5,9 @@ from datetime import date
 from PySide6.QtWidgets import QMenu
 from pathlib import Path
 from datetime import datetime, timedelta
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QColor, QBrush
 from PySide6.QtCore import Qt, QTimer, QDateTime
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog)
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
@@ -16,6 +16,11 @@ con=sqlite3.connect(DB)
 con.row_factory=sqlite3.Row
 con.execute('PRAGMA busy_timeout=5000')
 con.executescript('''CREATE TABLE IF NOT EXISTS boards(id INTEGER PRIMARY KEY,name TEXT NOT NULL);CREATE TABLE IF NOT EXISTS lanes(id INTEGER PRIMARY KEY,board_id INTEGER NOT NULL,name TEXT NOT NULL,position INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY,lane_id INTEGER NOT NULL,title TEXT NOT NULL,body TEXT DEFAULT '',checklist TEXT DEFAULT '[]',due TEXT,reminded INTEGER DEFAULT 0,position INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS folders(id INTEGER PRIMARY KEY,name TEXT NOT NULL);CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,folder_id INTEGER NOT NULL,title TEXT NOT NULL,body TEXT DEFAULT '',pinned INTEGER DEFAULT 0);''')
+# Additive migration: existing local data remains intact.
+for table in ('tasks','notes','folders','boards','lanes'):
+    cols={row['name'] for row in con.execute(f'PRAGMA table_info({table})')}
+    if 'color' not in cols:
+        con.execute(f"ALTER TABLE {table} ADD COLUMN color TEXT DEFAULT ''")
 if not con.execute('SELECT 1 FROM boards').fetchone():
     con.execute('INSERT INTO boards(name) VALUES(?)',('Работа',)); bid=con.execute('SELECT last_insert_rowid()').fetchone()[0]
     for i,n in enumerate(['Входящие','В работе','Ожидание','Готово']):con.execute('INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)',(bid,n,i))
@@ -37,9 +42,17 @@ class TaskDialog(QDialog):
         form=QFormLayout(self);self.title=QLineEdit(data['title'] if data else '');self.body=QTextEdit(data['body'] if data else '');self.check=QTextEdit('\n'.join(json.loads(data['checklist'] or '[]')) if data else '');self.due_enabled=QCheckBox('Напомнить в указанное время');self.due=QDateTimeEdit();self.due.setCalendarPopup(True);self.due.setDateTime(QDateTime.currentDateTime().addSecs(1800))
         if data and data['due']:
             self.due_enabled.setChecked(True);self.due.setDateTime(QDateTime.fromString(data['due'],Qt.ISODate))
+        self.color=QComboBox()
+        for label,code in [('Без цвета',''),('🌸 Розовый','#ed93bd'),('🩵 Голубой','#8ac9e8'),('🌿 Мятный','#80cbb2'),('🍋 Жёлтый','#e6cf83'),('💜 Сиреневый','#b5a0e6'),('🍑 Персиковый','#eda989')]:
+            self.color.addItem(label,code)
+        if data:
+            idx=self.color.findData(data['color'] or '')
+            if idx>=0:self.color.setCurrentIndex(idx)
+        form.addRow('Цвет',self.color)
         form.addRow('Название',self.title);form.addRow('Описание / записи',self.body);form.addRow('Чек-лист (пункт на строку)',self.check);form.addRow(self.due_enabled);form.addRow('Когда',self.due)
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel);buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject);form.addRow(buttons)
     def values(self):return (self.title.text().strip(),self.body.toPlainText(),json.dumps([x.strip() for x in self.check.toPlainText().splitlines() if x.strip()],ensure_ascii=False),self.due.dateTime().toPython().isoformat(timespec='minutes') if self.due_enabled.isChecked() else None)
+    def selected_color(self):return self.color.currentData()
 class App(QMainWindow):
     def __init__(self):
         super().__init__();self.setWindowTitle('APEX // TASK CONTROL');self.resize(1300,800)
@@ -57,7 +70,9 @@ class App(QMainWindow):
         self.setStyleSheet(STYLE)
         self.statusBar().showMessage('Готово • данные сохраняются локально')
     def setup_boards(self):
-        lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane);top.addStretch();lay.addLayout(top)
+        lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
+        options=QPushButton('⋯ Доска');options.clicked.connect(self.board_menu);top.addWidget(options)
+        top.addStretch();lay.addLayout(top)
         self.lanes=QHBoxLayout();lay.addLayout(self.lanes,1);self.refresh_boards()
     def refresh_boards(self):
         selected=self.board_pick.currentData();self.board_pick.blockSignals(True);self.board_pick.clear()
@@ -75,10 +90,15 @@ class App(QMainWindow):
         self.clear_layout(self.lanes);bid=self.board_pick.currentData()
         if bid is None:return
         for lane in rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(bid,)):
-            panel=QWidget();v=QVBoxLayout(panel);v.addWidget(QLabel('●  '+lane['name']))
+            panel=QWidget();v=QVBoxLayout(panel);header=QPushButton('●  '+lane['name']+'  ⋯')
+            header.setToolTip('Переименовать, изменить цвет или удалить колонку')
+            header.clicked.connect(lambda _,lid=lane['id']:self.lane_menu(lid))
+            if lane['color']:header.setStyleSheet('color: '+lane['color']+';')
+            v.addWidget(header)
             lst=TaskList(lane['id']);lst.setMinimumWidth(210);lst.moved.connect(self.drop_task)
             for task in rows('SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id',(lane['id'],)):
                 item=QListWidgetItem(task['title']+('   ⏰' if task['due'] else ''));item.setData(Qt.UserRole,task['id']);lst.addItem(item)
+                if task['color']:item.setForeground(QBrush(QColor(task['color'])))
             lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);lst.customContextMenuRequested.connect(lambda point,l=lst:self.task_menu(l,point));v.addWidget(lst,1)
             add=QPushButton('+ Карточка');add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid));v.addWidget(add)
             move=QPushButton('Переместить выбранную →');move.clicked.connect(lambda _,l=lst,lid=lane['id']:self.move_task(l,lid));v.addWidget(move)
@@ -115,6 +135,53 @@ class App(QMainWindow):
             if QMessageBox.question(self,'Удалить карточку?','Это действие нельзя отменить. Продолжить?')==QMessageBox.StandardButton.Yes:
                 run('DELETE FROM tasks WHERE id=?',(task_id,));self.refresh_all()
 
+    def ask_color(self, current=''):
+        color=QColorDialog.getColor(QColor(current or '#8ac9e8'),self,'Выбрать цвет')
+        return color.name() if color.isValid() else None
+    def confirm_delete(self, what, count=0):
+        return QMessageBox.question(self,'Подтвердить удаление',
+            f'Удалить {what}? Связанных записей: {count}. Отменить действие нельзя.',
+            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)==QMessageBox.StandardButton.Yes
+    def board_menu(self):
+        bid=self.board_pick.currentData()
+        if bid is None:return
+        menu=QMenu(self);rename=menu.addAction('Переименовать');color=menu.addAction('Выбрать цвет');delete=menu.addAction('Удалить доску…')
+        action=menu.exec(self.cursor().pos())
+        if action==rename:
+            old=rows('SELECT name FROM boards WHERE id=?',(bid,))[0]['name']
+            name,ok=QInputDialog.getText(self,'Название доски','Название:',text=old)
+            if ok and name.strip():run('UPDATE boards SET name=? WHERE id=?',(name.strip(),bid));self.refresh_boards()
+        elif action==color:
+            old=rows('SELECT color FROM boards WHERE id=?',(bid,))[0]['color']
+            value=self.ask_color(old)
+            if value:run('UPDATE boards SET color=? WHERE id=?',(value,bid))
+        elif action==delete:
+            count=rows('SELECT COUNT(*) AS n FROM tasks JOIN lanes ON tasks.lane_id=lanes.id WHERE lanes.board_id=?',(bid,))[0]['n']
+            if self.confirm_delete('доску и все её карточки',count):
+                with con:
+                    con.execute('DELETE FROM tasks WHERE lane_id IN (SELECT id FROM lanes WHERE board_id=?)',(bid,))
+                    con.execute('DELETE FROM lanes WHERE board_id=?',(bid,))
+                    con.execute('DELETE FROM boards WHERE id=?',(bid,))
+                self.refresh_boards()
+    def lane_menu(self,lid):
+        lane=rows('SELECT * FROM lanes WHERE id=?',(lid,))
+        if not lane:return
+        lane=lane[0];menu=QMenu(self);rename=menu.addAction('Переименовать');color=menu.addAction('Выбрать цвет');delete=menu.addAction('Удалить колонку…')
+        action=menu.exec(self.cursor().pos())
+        if action==rename:
+            name,ok=QInputDialog.getText(self,'Название колонки','Название:',text=lane['name'])
+            if ok and name.strip():run('UPDATE lanes SET name=? WHERE id=?',(name.strip(),lid));self.refresh_board()
+        elif action==color:
+            value=self.ask_color(lane['color'])
+            if value:run('UPDATE lanes SET color=? WHERE id=?',(value,lid));self.refresh_board()
+        elif action==delete:
+            count=rows('SELECT COUNT(*) AS n FROM tasks WHERE lane_id=?',(lid,))[0]['n']
+            if self.confirm_delete('колонку и все её карточки',count):
+                with con:
+                    con.execute('DELETE FROM tasks WHERE lane_id=?',(lid,))
+                    con.execute('DELETE FROM lanes WHERE id=?',(lid,))
+                self.refresh_board()
     def add_board(self):
         name,ok=QInputDialog.getText(self,'Новая доска','Название:')
         if ok and name.strip():run('INSERT INTO boards(name) VALUES(?)',(name.strip(),));self.refresh_boards()
@@ -123,34 +190,83 @@ class App(QMainWindow):
         if ok and name.strip() and self.board_pick.currentData():run('INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)',(self.board_pick.currentData(),name.strip(),len(rows('SELECT id FROM lanes WHERE board_id=?',(self.board_pick.currentData(),)))));self.refresh_board()
     def add_task(self,lid):
         d=TaskDialog(self)
-        if d.exec() and d.title.text().strip():run('INSERT INTO tasks(lane_id,title,body,checklist,due) VALUES(?,?,?,?,?)',(lid,*d.values()));self.refresh_board()
+        if d.exec() and d.title.text().strip():run('INSERT INTO tasks(lane_id,title,body,checklist,due,color) VALUES(?,?,?,?,?,?)',(lid,*d.values(),d.selected_color()));self.refresh_board()
     def edit_task(self,tid):
         task=rows('SELECT * FROM tasks WHERE id=?',(tid,))[0];d=TaskDialog(self,task)
-        if d.exec() and d.title.text().strip():run('UPDATE tasks SET title=?,body=?,checklist=?,due=?,reminded=0 WHERE id=?',(*d.values(),tid));self.refresh_all()
+        if d.exec() and d.title.text().strip():run('UPDATE tasks SET title=?,body=?,checklist=?,due=?,color=?,reminded=0 WHERE id=?',(*d.values(),d.selected_color(),tid));self.refresh_all()
     def move_task(self,lst,lid):
         item=lst.currentItem()
         if not item:return
         lanes=rows('SELECT * FROM lanes WHERE board_id=? ORDER BY position,id',(self.board_pick.currentData(),));names=[l['name'] for l in lanes];name,ok=QInputDialog.getItem(self,'Переместить карточку','В колонку:',names,0,False)
         if ok:run('UPDATE tasks SET lane_id=? WHERE id=?',(lanes[names.index(name)]['id'],item.data(Qt.UserRole)));self.refresh_board()
     def setup_notes(self):
-        h=QHBoxLayout(self.notes);left=QVBoxLayout();self.folder_list=QListWidget();self.folder_list.currentItemChanged.connect(lambda *_:self.refresh_notes());left.addWidget(QLabel('Папки'));left.addWidget(self.folder_list);b=QPushButton('+ Папка');b.clicked.connect(self.add_folder);left.addWidget(b);h.addLayout(left,1)
-        middle=QVBoxLayout();middle.addWidget(QLabel('Записи'));self.note_list=QListWidget();self.note_list.currentItemChanged.connect(lambda *_:self.change_note());middle.addWidget(self.note_list);b=QPushButton('+ Запись');b.clicked.connect(self.add_note);middle.addWidget(b);h.addLayout(middle,2)
+        h=QHBoxLayout(self.notes);left=QVBoxLayout();self.folder_list=QListWidget();self.folder_list.currentItemChanged.connect(lambda *_:self.refresh_notes());left.addWidget(QLabel('Папки'));left.addWidget(self.folder_list)
+        self.folder_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.folder_list.customContextMenuRequested.connect(lambda point:self.folder_menu(point))
+        b=QPushButton('+ Папка');b.clicked.connect(self.add_folder);left.addWidget(b);h.addLayout(left,1)
+        middle=QVBoxLayout();middle.addWidget(QLabel('Записи'));self.note_list=QListWidget();self.note_list.currentItemChanged.connect(lambda *_:self.change_note());middle.addWidget(self.note_list)
+        self.note_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.note_list.customContextMenuRequested.connect(lambda point:self.note_menu(point))
+        b=QPushButton('+ Запись');b.clicked.connect(self.add_note);middle.addWidget(b);h.addLayout(middle,2)
         right=QVBoxLayout();self.note_title=QLineEdit();self.note_title.setPlaceholderText('Заголовок');self.note_body=QTextEdit();right.addWidget(self.note_title);right.addWidget(self.note_body);b=QPushButton('Сохранить запись');b.clicked.connect(self.save_note);right.addWidget(b);h.addLayout(right,4);self.refresh_folders()
     def refresh_folders(self):
         current=self.folder_list.currentItem().data(Qt.UserRole) if self.folder_list.currentItem() else None;self.folder_list.clear()
         for f in rows('SELECT * FROM folders ORDER BY id'):
             item=QListWidgetItem(f['name']);item.setData(Qt.UserRole,f['id']);self.folder_list.addItem(item)
+            if f['color']:item.setForeground(QBrush(QColor(f['color'])))
             if f['id']==current:self.folder_list.setCurrentItem(item)
         if not self.folder_list.currentItem() and self.folder_list.count():self.folder_list.setCurrentRow(0)
     def add_folder(self):
         name,ok=QInputDialog.getText(self,'Новая папка','Название:')
         if ok and name.strip():run('INSERT INTO folders(name) VALUES(?)',(name.strip(),));self.refresh_folders()
+    def folder_menu(self,point):
+        item=self.folder_list.itemAt(point)
+        if not item:return
+        fid=item.data(Qt.UserRole)
+        menu=QMenu(self);rename=menu.addAction('Переименовать папку');color=menu.addAction('Выбрать цвет');delete=menu.addAction('Удалить папку…')
+        action=menu.exec(self.folder_list.mapToGlobal(point))
+        if action==rename:
+            name,ok=QInputDialog.getText(self,'Папка','Новое название:',text=item.text())
+            if ok and name.strip():run('UPDATE folders SET name=? WHERE id=?',(name.strip(),fid));self.refresh_folders()
+        elif action==color:
+            value=self.ask_color(rows('SELECT color FROM folders WHERE id=?',(fid,))[0]['color'])
+            if value:run('UPDATE folders SET color=? WHERE id=?',(value,fid));self.refresh_folders()
+        elif action==delete:
+            count=rows('SELECT COUNT(*) AS n FROM notes WHERE folder_id=?',(fid,))[0]['n']
+            if self.confirm_delete('папку и все её записи',count):
+                self.flush_note();self.active_note_id=None
+                with con:
+                    con.execute('DELETE FROM notes WHERE folder_id=?',(fid,))
+                    con.execute('DELETE FROM folders WHERE id=?',(fid,))
+                self.refresh_folders();self.refresh_notes()
+    def note_menu(self,point):
+        item=self.note_list.itemAt(point)
+        if not item:return
+        nid=item.data(Qt.UserRole)
+        record=rows('SELECT * FROM notes WHERE id=?',(nid,))[0]
+        menu=QMenu(self);rename=menu.addAction('Переименовать');pin=menu.addAction('Открепить' if record['pinned'] else 'Закрепить');color=menu.addAction('Выбрать цвет');delete=menu.addAction('Удалить запись…')
+        action=menu.exec(self.note_list.mapToGlobal(point))
+        if action==rename:
+            name,ok=QInputDialog.getText(self,'Запись','Название:',text=record['title'])
+            if ok and name.strip():
+                self.flush_note();run('UPDATE notes SET title=? WHERE id=?',(name.strip(),nid));self.refresh_notes()
+                if self.active_note_id==nid:self.open_note()
+        elif action==pin:
+            self.flush_note();run('UPDATE notes SET pinned=? WHERE id=?',(0 if record['pinned'] else 1,nid));self.refresh_notes()
+        elif action==color:
+            value=self.ask_color(record['color'])
+            if value:run('UPDATE notes SET color=? WHERE id=?',(value,nid));self.refresh_notes()
+        elif action==delete and self.confirm_delete('запись'):
+            self.flush_note();run('DELETE FROM notes WHERE id=?',(nid,))
+            if self.active_note_id==nid:self.active_note_id=None
+            self.refresh_notes()
     def refresh_notes(self):
         self.flush_note();selected=self.note_list.currentItem().data(Qt.UserRole) if self.note_list.currentItem() else None
         self.note_list.blockSignals(True);self.note_list.clear();f=self.folder_list.currentItem()
         if f:
             for n in rows('SELECT * FROM notes WHERE folder_id=? ORDER BY pinned DESC,id DESC',(f.data(Qt.UserRole),)):
                 item=QListWidgetItem(('★ ' if n['pinned'] else '')+n['title']);item.setData(Qt.UserRole,n['id']);self.note_list.addItem(item)
+                if n['color']:item.setForeground(QBrush(QColor(n['color'])))
                 if n['id']==selected:self.note_list.setCurrentItem(item)
         self.note_list.blockSignals(False)
         self.change_note()
