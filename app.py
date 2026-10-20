@@ -1,16 +1,24 @@
 import sys, sqlite3, json
 from board_widgets import TaskList
-from theme import STYLE
+from theme import make_style, PALETTES, ACCENTS, FONTS
 from datetime import date
 from PySide6.QtWidgets import QMenu
 from pathlib import Path
 from datetime import datetime, timedelta, time
 from PySide6.QtGui import QKeySequence, QShortcut, QColor, QBrush
 from PySide6.QtCore import Qt, QTimer, QDateTime
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QListWidget,QListWidgetItem,QLineEdit,QTextEdit,QInputDialog,QMessageBox,QSplitter,QTabWidget,QDateTimeEdit,QDialog,QDialogButtonBox,QFormLayout,QComboBox,QCheckBox,QSystemTrayIcon,QStyle,QColorDialog,QGroupBox,QScrollArea,QSpinBox)
 
 ROOT=Path.home()/'.apex_task_control'; ROOT.mkdir(exist_ok=True)
 DB=ROOT/'apex.db'
+SETTINGS_FILE=ROOT/'settings.json'
+def load_settings():
+    try:
+        data=json.loads(SETTINGS_FILE.read_text(encoding='utf-8'))
+        return data if isinstance(data,dict) else {}
+    except (OSError,ValueError):return {}
+def save_settings(data):
+    SETTINGS_FILE.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
 BACKUPS=ROOT/'backups'; BACKUPS.mkdir(exist_ok=True)
 first_run=not DB.exists()
 con=sqlite3.connect(DB)
@@ -44,12 +52,13 @@ def run(q,p=()):con.execute(q,p);con.commit()
 class TaskDialog(QDialog):
     def __init__(self,parent=None,data=None):
         super().__init__(parent);self.setWindowTitle('Карточка задачи');self.resize(540,530)
-        form=QFormLayout(self);self.title=QLineEdit(data['title'] if data else '');self.body=QTextEdit(data['body'] if data else '');self.check=QTextEdit('\n'.join(json.loads(data['checklist'] or '[]')) if data else '');self.due_enabled=QCheckBox('Напомнить в указанное время');self.due=QDateTimeEdit();self.due.setCalendarPopup(True);self.due.setDateTime(QDateTime.currentDateTime().addSecs(1800))
+        form=QFormLayout(self);self.title=QLineEdit(data['title'] if data else '');self.body=QTextEdit(data['body'] if data else '');self.check=QTextEdit('\n'.join(json.loads(data['checklist'] or '[]')) if data else '');self.due_enabled=QCheckBox('Напомнить в указанное время');self.due=QDateTimeEdit();self.due.setCalendarPopup(True);self.due.setDateTime(QDateTime.currentDateTime().addSecs(7200));self.due_enabled.setChecked(True)
         if data and data['due']:
             self.due_enabled.setChecked(True);self.due.setDateTime(QDateTime.fromString(data['due'],Qt.ISODate))
         self.color=QComboBox()
-        for label,code in [('Без цвета',''),('🌸 Розовый','#ed93bd'),('🩵 Голубой','#8ac9e8'),('🌿 Мятный','#80cbb2'),('🍋 Жёлтый','#e6cf83'),('💜 Сиреневый','#b5a0e6'),('🍑 Персиковый','#eda989')]:
+        for label,code in [('Без цвета',''),('Розовый','#ed93bd'),('Голубой','#8ac9e8'),('Мятный','#80cbb2'),('Жёлтый','#e6cf83'),('Сиреневый','#b5a0e6'),('Персиковый','#eda989')]:
             self.color.addItem(label,code)
+            if code:self.color.setItemData(self.color.count()-1,QBrush(QColor(code)),Qt.ItemDataRole.ForegroundRole)
         if data:
             idx=self.color.findData(data['color'] or '')
             if idx>=0:self.color.setCurrentIndex(idx)
@@ -73,12 +82,49 @@ class App(QMainWindow):
         self.quick_shortcut=QShortcut(QKeySequence('Ctrl+N'),self);self.quick_shortcut.activated.connect(self.quick_add)
         self.timer=QTimer(self);self.timer.timeout.connect(self.check_due);self.timer.start(15000);self.check_due()
         self.schedule_timer=QTimer(self);self.schedule_timer.timeout.connect(self.refresh_control);self.schedule_timer.start(30000)
-        self.setStyleSheet(STYLE)
+        self.settings=load_settings()
+        self.apply_theme()
         self.statusBar().showMessage('Готово • данные сохраняются локально')
+    def apply_theme(self):
+        settings=self.settings
+        self.setStyleSheet(make_style(
+            settings.get('theme','Тёмно-синий'),
+            settings.get('accent','Синий'),
+            settings.get('font','Segoe UI'),
+            settings.get('font_size',13)))
+        self.refresh_board()
+
+    def show_settings(self):
+        dialog=QDialog(self)
+        dialog.setWindowTitle('APEX — оформление')
+        dialog.resize(420,260)
+        form=QFormLayout(dialog)
+        theme=QComboBox();theme.addItems(list(PALETTES))
+        accent=QComboBox();accent.addItems(list(ACCENTS))
+        font=QComboBox();font.addItems(FONTS)
+        size=QSpinBox();size.setRange(11,19);size.setSuffix(' px')
+        for widget,key,default in [(theme,'theme','Тёмно-синий'),(accent,'accent','Синий'),(font,'font','Segoe UI')]:
+            value=self.settings.get(key,default)
+            idx=widget.findText(value)
+            if idx>=0:widget.setCurrentIndex(idx)
+        size.setValue(self.settings.get('font_size',13))
+        form.addRow('Тема интерфейса',theme)
+        form.addRow('Акцент',accent)
+        form.addRow('Шрифт',font)
+        form.addRow('Размер текста',size)
+        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Save|QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept);buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec()==QDialog.DialogCode.Accepted:
+            self.settings={'theme':theme.currentText(),'accent':accent.currentText(),
+                'font':font.currentText(),'font_size':size.value()}
+            save_settings(self.settings)
+            self.apply_theme()
+
     def setup_boards(self):
         lay=QVBoxLayout(self.boards);top=QHBoxLayout();self.board_pick=QComboBox();self.board_pick.currentIndexChanged.connect(self.refresh_board);top.addWidget(QLabel('Доска:'));top.addWidget(self.board_pick);addboard=QPushButton('+ Доска');addboard.clicked.connect(self.add_board);top.addWidget(addboard);addlane=QPushButton('+ Колонка');addlane.clicked.connect(self.add_lane);top.addWidget(addlane)
         options=QPushButton('⋯ Доска');options.clicked.connect(self.board_menu);top.addWidget(options)
-        top.addStretch();lay.addLayout(top)
+        top.addStretch();settings=QPushButton('Настройки вида');settings.clicked.connect(self.show_settings);top.addWidget(settings);lay.addLayout(top)
         self.lanes=QHBoxLayout();lay.addLayout(self.lanes,1);self.refresh_boards()
     def refresh_boards(self):
         selected=self.board_pick.currentData();self.board_pick.blockSignals(True);self.board_pick.clear()
@@ -103,8 +149,18 @@ class App(QMainWindow):
             v.addWidget(header)
             lst=TaskList(lane['id']);lst.setMinimumWidth(210);lst.moved.connect(self.drop_task)
             for task in rows('SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id',(lane['id'],)):
-                item=QListWidgetItem(task['title']+('   ⏰' if task['due'] else ''));item.setData(Qt.UserRole,task['id']);lst.addItem(item)
-                if task['color']:item.setForeground(QBrush(QColor(task['color'])))
+                label=task['title']
+                if task['due']:
+                    try:
+                        deadline=datetime.fromisoformat(task['due'])
+                        label+='\nСрок: '+deadline.strftime('%d.%m %H:%M')
+                        if deadline<datetime.now():label+='  ·  ПРОСРОЧЕНО'
+                    except ValueError:label+='\nСрок: '+task['due']
+                item=QListWidgetItem(label);item.setData(Qt.UserRole,task['id']);lst.addItem(item)
+                if task['color']:
+                    tint=QColor(task['color']);tint.setAlpha(45)
+                    item.setBackground(QBrush(tint))
+                    item.setForeground(QBrush(QColor(task['color'])))
             lst.itemDoubleClicked.connect(lambda item:self.edit_task(item.data(Qt.UserRole)));lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);lst.customContextMenuRequested.connect(lambda point,l=lst:self.task_menu(l,point));v.addWidget(lst,1)
             add=QPushButton('+ Карточка');add.clicked.connect(lambda _,lid=lane['id']:self.add_task(lid));v.addWidget(add)
             move=QPushButton('Переместить выбранную →');move.clicked.connect(lambda _,l=lst,lid=lane['id']:self.move_task(l,lid));v.addWidget(move)
