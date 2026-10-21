@@ -1074,16 +1074,35 @@ ApplicationWindow {
             Label { text: "Название задачи"; color: root.secondary }
             TextField2 { id: taskTitle; Layout.fillWidth: true; placeholderText: "Что нужно сделать?" }
             Label { text: "Описание"; color: root.secondary }
-            TextArea {
-                id: taskBody
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 190
-                color: root.foreground
-                wrapMode: TextEdit.Wrap
-                placeholderTextColor: "#9bb0ca"
-                font.pixelSize: 14
-                placeholderText: "Детали задачи (необязательно)"
-                background: Rectangle { color: "#223146"; radius: 9 }
+                Label { text: "Описание"; color: root.secondary; visible: false }
+                Item { Layout.fillWidth: true }
+                CheckBox {
+                    id: taskWrapLines
+                    text: "Переносить строки"
+                    checked: true
+                    palette.text: root.secondary
+                }
+            }
+            ScrollView {
+                id: taskBodyScroll
+                Layout.fillWidth: true
+                Layout.preferredHeight: 230
+                clip: true
+                ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                ScrollBar.horizontal.policy: taskWrapLines.checked ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
+                TextArea {
+                    id: taskBody
+                    width: taskWrapLines.checked ? taskBodyScroll.availableWidth :
+                           Math.max(taskBodyScroll.availableWidth, implicitWidth)
+                    color: root.foreground
+                    wrapMode: taskWrapLines.checked ? TextEdit.Wrap : TextEdit.NoWrap
+                    placeholderTextColor: "#9bb0ca"
+                    font.pixelSize: 14
+                    placeholderText: "Детали задачи (необязательно)"
+                    background: Rectangle { color: "#223146"; radius: 9 }
+                }
             }
             Label { text: "Ссылка на Telegram"; color: root.secondary }
             TextField2 {
