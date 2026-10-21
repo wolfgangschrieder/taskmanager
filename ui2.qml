@@ -240,7 +240,8 @@ ApplicationWindow {
                                         target: workspace
                                         function onChanged() { lanePanel.loadTasks() }
                                     }
-                                    width: Math.max(250, Math.min(720, Number(modelData.width || 320)))
+                                    property real previewWidth: -1
+                                     width: previewWidth >= 0 ? previewWidth : Math.max(250, Math.min(720, Number(modelData.width || 320)))
                                     height: Math.max(190, Math.min(boardScroll.height - 8, laneColumn.implicitHeight+24))
                                     color: modelData.bg_color || root.surface
                                     DropArea {
@@ -275,9 +276,14 @@ ApplicationWindow {
                                             onPositionChanged: function(mouse) {
                                                 if (!pressed) return
                                                 var x=mapToItem(root.contentItem, mouse.x, mouse.y).x
-                                                lanePanel.width=Math.max(250,Math.min(720,startingWidth+x-startingX))
+                                                lanePanel.previewWidth=Math.max(250,Math.min(720,startingWidth+x-startingX))
                                             }
-                                            onReleased: workspace.resizeLane(lanePanel.modelData.id, Math.round(lanePanel.width))
+                                            onReleased: {
+                                                 var finalWidth = Math.round(lanePanel.width)
+                                                 workspace.resizeLane(lanePanel.modelData.id, finalWidth)
+                                                 lanePanel.previewWidth = -1
+                                             }
+                                             onCanceled: lanePanel.previewWidth = -1
                                         }
                                     }
                                     Column {
