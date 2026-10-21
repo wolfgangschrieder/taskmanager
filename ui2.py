@@ -31,8 +31,9 @@ class Workspace(QObject):
             CREATE TABLE IF NOT EXISTS folders(id INTEGER PRIMARY KEY,name TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,folder_id INTEGER NOT NULL,title TEXT NOT NULL,body TEXT DEFAULT '',pinned INTEGER DEFAULT 0);
         """)
+        self._backup("before-migration")
         self._migrate()
-        self._backup()
+        self._backup("daily")
         self._pending_alarm = None
         self._ticker = QTimer(self)
         self._ticker.timeout.connect(self.check_alarms)
@@ -64,10 +65,10 @@ class Workspace(QObject):
                 self.db.execute("INSERT INTO lanes(board_id,name,position) VALUES(?,?,?)", (board_id,name,position))
         self.db.commit()
 
-    def _backup(self):
+    def _backup(self, kind="daily"):
         backup_dir=ROOT / "backups"
         backup_dir.mkdir(exist_ok=True)
-        destination=backup_dir / ("apex-ui2-"+datetime.now().strftime("%Y-%m-%d")+".db")
+        destination=backup_dir / ("manager-helper-"+kind+"-"+datetime.now().strftime("%Y-%m-%d")+".db")
         if not destination.exists():
             with sqlite3.connect(destination) as target:
                 self.db.backup(target)
