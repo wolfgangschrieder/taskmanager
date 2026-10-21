@@ -184,6 +184,16 @@ ApplicationWindow {
                                 delegate: Panel {
                                     id: lanePanel
                                     required property var modelData
+                                    property var tasksData: []
+                                    function loadTasks() {
+                                        if (modelData && modelData.id) tasksData = workspace.tasks(modelData.id)
+                                    }
+                                    Component.onCompleted: loadTasks()
+                                    onModelDataChanged: loadTasks()
+                                    Connections {
+                                        target: workspace
+                                        function onChanged() { lanePanel.loadTasks() }
+                                    }
                                     width: Math.max(270,Math.min(600,Math.max(modelData.width || 320, (boardScroll.width - 18 * Math.max(0,root.laneData.length-1)) / Math.max(1,root.laneData.length))))
                                     height: Math.max(190, Math.min(boardScroll.height - 8, laneColumn.implicitHeight+24))
                                     color: modelData.bg_color || root.surface
@@ -214,7 +224,7 @@ ApplicationWindow {
                                             }
                                         }
                                         Repeater {
-                                            model: lanePanel.modelData ? workspace.tasks(lanePanel.modelData.id) : []
+                                            model: lanePanel.tasksData
                                             delegate: Rectangle {
                                                 id: taskCard
                                                 required property var modelData
