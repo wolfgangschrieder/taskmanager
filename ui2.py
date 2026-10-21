@@ -71,9 +71,24 @@ class Workspace(QObject):
         backup_dir=ROOT / "backups"
         backup_dir.mkdir(exist_ok=True)
         destination=backup_dir / ("manager-helper-"+kind+"-"+datetime.now().strftime("%Y-%m-%d")+".db")
-        if not destination.exists():
-            with sqlite3.connect(destination) as target:
+        if destination.exists():
+            return
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=backup_dir, prefix=".backup-", suffix=".db", delete=False
+            ) as handle:
+                temporary = Path(handle.name)
+            with sqlite3.connect(temporary) as target:
                 self.db.backup(target)
+                check = target.execute("PRAGMA quick_check").fetchone()
+                if not check or check[0] != "ok":
+                    raise sqlite3.DatabaseError("Backup integrity check failed")
+            # A complete snapshot is published only after the copy and check succeed.
+            os.replace(temporary, destination)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def _query(self, sql, args=()):
         return [dict(row) for row in self.db.execute(sql, args)]
