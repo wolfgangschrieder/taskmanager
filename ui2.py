@@ -59,6 +59,9 @@ class Workspace(QObject):
         if "width" not in cols:
             self.db.execute("ALTER TABLE lanes ADD COLUMN width INTEGER DEFAULT 320")
         task_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(tasks)")}
+        if "created_at" not in task_cols:
+            # Historical creation timestamps were not recorded. Do not fabricate them.
+            self.db.execute("ALTER TABLE tasks ADD COLUMN created_at TEXT")
         if "alert15_sent" not in task_cols:
             self.db.execute("ALTER TABLE tasks ADD COLUMN alert15_sent INTEGER DEFAULT 0")
         if "telegram_url" not in task_cols:
@@ -120,6 +123,28 @@ class Workspace(QObject):
     @Slot(int, result="QVariantList")
     def tasks(self, lane_id):
         return self._query("SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id", (lane_id,))
+
+    @Slot(str, result="QVariantList")
+    def allTasks(self, search):
+        """Newest first; ID is the reliable creation sequence for legacy rows."""
+        search = search.strip()
+        if search:
+            pattern = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            return self._query("""
+                SELECT tasks.*, lanes.name AS lane_name, boards.name AS board_name
+                FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
+                JOIN boards ON lanes.board_id=boards.id
+                WHERE tasks.title LIKE ? ESCAPE '\\'
+                   OR tasks.body LIKE ? ESCAPE '\\'
+                   OR tasks.telegram_url LIKE ? ESCAPE '\\'
+                ORDER BY tasks.id DESC
+            """, (pattern, pattern, pattern))
+        return self._query("""
+            SELECT tasks.*, lanes.name AS lane_name, boards.name AS board_name
+            FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
+            JOIN boards ON lanes.board_id=boards.id
+            ORDER BY tasks.id DESC
+        """)
 
     @Slot(int, result="QVariantMap")
     def task(self, task_id):
@@ -201,9 +226,9 @@ class Workspace(QObject):
     @Slot(int, str, str, str, str)
     def addTask(self, lane_id, title, body, due, color):
         if title.strip() and self.validDue(due):
-            self._write("""INSERT INTO tasks(lane_id,title,body,due,color,position)
-                        VALUES(?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0))""",
-                        (lane_id,title.strip(),body,due or None,color,lane_id))
+            self._write("""INSERT INTO tasks(lane_id,title,body,due,color,position,created_at)
+                        VALUES(?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0),?)""",
+                        (lane_id,title.strip(),body,due or None,color,lane_id,datetime.now().isoformat(timespec="seconds")))
 
     @Slot(int, str, str, str, str, str)
     def saveTaskDetails(self, task_id, title, body, due, color, telegram_url):
@@ -225,9 +250,9 @@ class Workspace(QObject):
         normalized = self._telegram_url(telegram_url)
         if normalized is None:
             return
-        self._write("""INSERT INTO tasks(lane_id,title,body,due,color,telegram_url,position)
-                     VALUES(?,?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0))""",
-                    (lane_id, title.strip(), body, due or None, color, normalized, lane_id))
+        self._write("""INSERT INTO tasks(lane_id,title,body,due,color,telegram_url,position,created_at)
+                     VALUES(?,?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0),?)""",
+                    (lane_id, title.strip(), body, due or None, color, normalized, lane_id, datetime.now().isoformat(timespec="seconds")))
 
     def _telegram_url(self, raw):
         raw = raw.strip()
@@ -478,13 +503,13 @@ class Workspace(QObject):
         with self.db:
             self.db.execute("""
                 INSERT INTO tasks(lane_id,title,body,checklist,due,reminded,position,
-                    color,bg_color,text_color,telegram_url,alert15_sent)
-                VALUES(?,?,?,?,?,0,?,?,?,?,?,0)
+                    color,bg_color,text_color,telegram_url,alert15_sent,created_at)
+                VALUES(?,?,?,?,?,0,?,?,?,?,?,0,?)
             """, (task["lane_id"], task["title"], task["body"], task["checklist"],
                   task["due"], (self.db.execute(
                       "SELECT COALESCE(MAX(position)+1,0) FROM tasks WHERE lane_id=?",
                       (task["lane_id"],)).fetchone()[0]), task["color"], task["bg_color"],
-                  task["text_color"], task["telegram_url"]))
+                  task["text_color"], task["telegram_url"], datetime.now().isoformat(timespec="seconds")))
         self.changed.emit()
         return True
 
