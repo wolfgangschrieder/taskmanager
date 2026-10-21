@@ -522,7 +522,7 @@ class Workspace(QObject):
         if task_id != self._pending_alarm:
             return
         if action=="done":
-            self._write("UPDATE tasks SET reminded=1 WHERE id=?", (task_id,))
+            self._write("UPDATE tasks SET due=NULL, reminded=1 WHERE id=?", (task_id,))
         elif action=="snooze":
             due=(datetime.now()+timedelta(minutes=15)).isoformat(timespec="minutes")
             self._write("UPDATE tasks SET due=?,reminded=0 WHERE id=?", (due,task_id))
