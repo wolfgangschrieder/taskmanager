@@ -412,9 +412,6 @@ class Workspace(QObject):
             return False
         if before_task_id == task_id:
             return False
-        source_board=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (row[0],)).fetchone()
-        if not source_board or source_board[0] != target[0]:
-            return False
         if before_task_id:
             before=self.db.execute("SELECT lane_id FROM tasks WHERE id=?", (before_task_id,)).fetchone()
             if not before or before[0] != target_lane_id or before_task_id == task_id:
@@ -435,6 +432,21 @@ class Workspace(QObject):
                     self.db.execute("UPDATE tasks SET position=? WHERE id=?", (pos,task))
         self.changed.emit()
         return True
+
+    @Slot(int, int, result=bool)
+    def moveTaskToLane(self, task_id, lane_id):
+        """Explicit destination selector, including a different board."""
+        return self.dropTask(task_id, lane_id, 0)
+
+    @Slot(str, result=bool)
+    def isOverdue(self, raw_due):
+        if not raw_due:
+            return False
+        try:
+            due = datetime.strptime(raw_due.replace("T", " "), "%Y-%m-%d %H:%M")
+            return due < datetime.now()
+        except (ValueError, AttributeError):
+            return False
 
     @Slot(int, int)
     def resizeLane(self, lane_id, width):
