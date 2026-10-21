@@ -90,7 +90,9 @@ ApplicationWindow {
         editLaneId=lane
         taskTitle.text=task ? task.title : ""
         taskBody.text=task ? task.body : ""
+        taskTimer.checked=Boolean(task && task.due)
         taskDue.text=task && task.due ? task.due.replace("T"," ") : ""
+        taskTelegram.text=task ? (task.telegram_url || "") : ""
         taskAccent.text=task ? (task.color || "") : ""
         taskDialog.open()
     }
@@ -707,25 +709,69 @@ ApplicationWindow {
         }
     }
     StyledDialog {
-        id: taskDialog; title: root.editTaskId ? "Редактировать задачу" : "Новая задача"
-        canSubmit: taskTitle.text.trim().length > 0 && workspace.validDue(taskDue.text)
-        modal: true; anchors.centerIn: parent; width: 550
+        id: taskDialog
+        title: root.editTaskId ? "Редактировать задачу" : "Новая задача"
+        canSubmit: taskTitle.text.trim().length > 0
+                   && (!taskTimer.checked || workspace.validDue(taskDue.text) && taskDue.text.trim().length > 0)
+                   && workspace.validTelegram(taskTelegram.text)
+        modal: true
+        anchors.centerIn: parent
+        width: 550
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
-            anchors.fill: parent; spacing: 12
-            TextField2 { id: taskTitle; Layout.fillWidth: true; placeholderText: "Название" }
+            anchors.fill: parent
+            spacing: 11
+            Label { text: "Название задачи"; color: root.secondary }
+            TextField2 { id: taskTitle; Layout.fillWidth: true; placeholderText: "Что нужно сделать?" }
+            Label { text: "Описание"; color: root.secondary }
             TextArea {
-                id: taskBody; Layout.fillWidth: true; Layout.preferredHeight: 110
-                color: root.foreground; wrapMode: TextEdit.Wrap
+                id: taskBody
+                Layout.fillWidth: true
+                Layout.preferredHeight: 85
+                color: root.foreground
+                wrapMode: TextEdit.Wrap
                 placeholderTextColor: "#9bb0ca"
                 font.pixelSize: 14
-                placeholderText: "Описание"
+                placeholderText: "Детали задачи (необязательно)"
                 background: Rectangle { color: "#223146"; radius: 9 }
             }
-            Label { text: "Дедлайн: ГГГГ-ММ-ДД ЧЧ:ММ (пусто — без срока)"; color: root.secondary }
-            TextField2 { id: taskDue; Layout.fillWidth: true; placeholderText: "2026-10-20 14:00" }
-            Label { visible: !workspace.validDue(taskDue.text); text: "Проверь дату: ГГГГ-ММ-ДД ЧЧ:ММ"; color: "#ff8999" }
-            Label { text: "Цветовой маркер — выбери цвет"; color: root.secondary }
+            Label { text: "Ссылка на Telegram"; color: root.secondary }
+            TextField2 {
+                id: taskTelegram
+                Layout.fillWidth: true
+                placeholderText: "https://t.me/username/123"
+            }
+            Label {
+                visible: !workspace.validTelegram(taskTelegram.text)
+                text: "Укажи ссылку t.me или tg://"
+                color: "#ff8999"
+            }
+            CheckBox {
+                id: taskTimer
+                text: "Поставить таймер"
+                checked: false
+                onToggled: {
+                    if (checked && !taskDue.text.trim())
+                        taskDue.text = workspace.defaultTaskDue()
+                }
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: taskTimer.checked
+                spacing: 5
+                Label { text: "Срок выполнения · по умолчанию через 2 часа"; color: root.secondary }
+                TextField2 {
+                    id: taskDue
+                    Layout.fillWidth: true
+                    placeholderText: "ГГГГ-ММ-ДД ЧЧ:ММ"
+                }
+                Label {
+                    visible: !workspace.validDue(taskDue.text) || !taskDue.text.trim()
+                    text: "Укажи дату и время: ГГГГ-ММ-ДД ЧЧ:ММ"
+                    color: "#ff8999"
+                }
+            }
+            Label { text: "Цветовой маркер"; color: root.secondary }
             ColorPicker { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
             ActionButton {
                 text: "Удалить задачу навсегда"
@@ -739,9 +785,11 @@ ApplicationWindow {
             }
         }
         onAccepted: {
-            var due=taskDue.text.trim().replace(" ","T")
-            if (root.editTaskId) workspace.saveTask(root.editTaskId,taskTitle.text,taskBody.text,due,taskAccent.text)
-            else workspace.addTask(root.editLaneId,taskTitle.text,taskBody.text,due,taskAccent.text)
+            var due = taskTimer.checked ? taskDue.text.trim().replace(" ","T") : ""
+            if (root.editTaskId)
+                workspace.saveTaskDetails(root.editTaskId,taskTitle.text,taskBody.text,due,taskAccent.text,taskTelegram.text)
+            else
+                workspace.addTaskDetails(root.editLaneId,taskTitle.text,taskBody.text,due,taskAccent.text,taskTelegram.text)
         }
     }
     StyledDialog {
