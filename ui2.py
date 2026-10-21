@@ -150,14 +150,17 @@ class Workspace(QObject):
         if not title or not self.validDue(due):
             return
         if task_id:
-            self._write("UPDATE tasks SET title=?,body=?,due=?,color=?,reminded=0 WHERE id=?",
-                        (title,body,due or None,color,task_id))
+            self._write("""UPDATE tasks SET title=?,body=?,due=?,color=?,
+                        reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END
+                        WHERE id=?""",
+                        (title,body,due or None,color,due or None,task_id))
 
     @Slot(int, str, str, str, str)
     def addTask(self, lane_id, title, body, due, color):
         if title.strip() and self.validDue(due):
-            self._write("INSERT INTO tasks(lane_id,title,body,due,color) VALUES(?,?,?,?,?)",
-                        (lane_id,title.strip(),body,due or None,color))
+            self._write("""INSERT INTO tasks(lane_id,title,body,due,color,position)
+                        VALUES(?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0))""",
+                        (lane_id,title.strip(),body,due or None,color,lane_id))
 
     @Slot(int, str, str, str, int)
     def styleLane(self, lane_id, background, foreground, accent, width):
