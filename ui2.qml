@@ -48,6 +48,10 @@ ApplicationWindow {
     property int editTaskId: 0
     property int editLaneId: 0
     property int alarmTaskId: 0
+    property bool alarmAdvance: false
+    property int contextTaskId: 0
+    property int createBoardId: 0
+    property int createLaneId: 0
     property var boardData: []
     property var laneData: []
     property var folderData: []
@@ -85,6 +89,18 @@ ApplicationWindow {
         if (!raw) return ""
         return raw.replace("T"," ").slice(5,16)
     }
+    function openQuickCreate() {
+        root.refresh()
+        if (!root.boardData.length) return
+        root.createBoardId = root.boardId || root.boardData[0].id
+        var lanes = workspace.lanes(root.createBoardId)
+        root.createLaneId = lanes.length ? lanes[0].id : 0
+        root.taskEditor(null, root.createLaneId)
+    }
+    function openTaskContext(task, x, y) {
+        root.contextTaskId = task.id
+        taskContext.popup(x, y)
+    }
     function taskEditor(task, lane) {
         editTaskId=task ? task.id : 0
         editLaneId=lane
@@ -94,7 +110,24 @@ ApplicationWindow {
         taskDue.text=task && task.due ? task.due.replace("T"," ") : ""
         taskTelegram.text=task ? (task.telegram_url || "") : ""
         taskAccent.text=task ? (task.color || "") : ""
+        if (!task) {
+            var destination = workspace.lanes(root.boardId)
+            var found = false
+            for (var i=0;i<destination.length;i++) if (destination[i].id === lane) found = true
+            root.createBoardId = root.boardId
+            root.createLaneId = lane
+            if (!found && root.boardData.length) {
+                root.createBoardId = root.boardData[0].id
+                var initial = workspace.lanes(root.createBoardId)
+                root.createLaneId = initial.length ? initial[0].id : 0
+            }
+        }
         taskDialog.open()
+    }
+    Shortcut {
+        sequences: ["Ctrl+N"]
+        context: Qt.ApplicationShortcut
+        onActivated: root.openQuickCreate()
     }
     Component.onCompleted: {
         var settings=workspace.appearance()
@@ -113,8 +146,16 @@ ApplicationWindow {
     Connections {
         target: workspace
         function onChanged() { root.refresh() }
+        function onReminderRaised(taskId,title,due) {
+            root.alarmTaskId=taskId
+            root.alarmAdvance=true
+            alarmTitle.text=title
+            alarmDue.text="Срок: "+due.replace("T"," ")
+            alarmDialog.open()
+        }
         function onAlarmRaised(taskId,title,due) {
             root.alarmTaskId=taskId
+            root.alarmAdvance=false
             alarmTitle.text=title
             alarmDue.text="Срок: "+due.replace("T"," ")
             alarmDialog.open()
@@ -436,15 +477,8 @@ ApplicationWindow {
                                                     onClicked: function(mouse) {
                                                         if (taskCard.wasDragged) return
                                                         if (mouse.button===Qt.RightButton) {
-                                                            root.editTaskId=taskCard.modelData.id
-                                                            taskStyleBackground.text=taskCard.modelData.bg_color || ""
-                                                            taskStyleForeground.text=taskCard.modelData.text_color || ""
-                                                            taskStyleAccent.text=taskCard.modelData.color || ""
-                                                            taskStyleTelegram.text=taskCard.modelData.telegram_url || ""
-                                                            root.moveTaskBoardId = 0
-                                                            root.moveTaskBoardId = root.boardId
-                                                            root.moveTaskLaneId = taskCard.modelData.lane_id
-                                                            taskStyle.open()
+                                                            var pos = taskCard.mapToItem(root.contentItem, mouse.x, mouse.y)
+                                                            root.openTaskContext(taskCard.modelData, pos.x, pos.y)
                                                         } else root.taskEditor(taskCard.modelData,lanePanel.modelData.id)
                                                     }
                                                 }
@@ -763,6 +797,49 @@ ApplicationWindow {
         }
     }
 
+    Menu {
+        id: taskContext
+        modal: false
+        MenuItem {
+            text: "Редактировать"
+            onTriggered: {
+                var task=workspace.task(root.contextTaskId)
+                root.taskEditor(task, task.lane_id)
+            }
+        }
+        MenuItem {
+            text: "Перенести"
+            onTriggered: {
+                var task=workspace.task(root.contextTaskId)
+                root.editTaskId=task.id
+                taskStyleBackground.text=task.bg_color || ""
+                taskStyleForeground.text=task.text_color || ""
+                taskStyleAccent.text=task.color || ""
+                taskStyleTelegram.text=task.telegram_url || ""
+                root.moveTaskBoardId=root.boardData.find(function(b) {
+                    return workspace.lanes(b.id).some(function(l) { return l.id===task.lane_id })
+                }).id
+                root.moveTaskLaneId=task.lane_id
+                taskStyle.open()
+            }
+        }
+        MenuItem {
+            text: "Завершить"
+            onTriggered: workspace.completeTask(root.contextTaskId)
+        }
+        MenuItem {
+            text: "Дублировать"
+            onTriggered: workspace.duplicateTask(root.contextTaskId)
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "Удалить"
+            onTriggered: {
+                root.deleteTaskId=root.contextTaskId
+                confirmDeleteTask.open()
+            }
+        }
+    }
     property string promptMode: "board"
     property int laneSettingsId: 0
     property int deleteLaneId: 0
@@ -816,6 +893,7 @@ ApplicationWindow {
         id: taskDialog
         title: root.editTaskId ? "Редактировать задачу" : "Новая задача"
         canSubmit: taskTitle.text.trim().length > 0
+                   && (root.editTaskId > 0 || root.createLaneId > 0)
                    && (!taskTimer.checked || workspace.validDue(taskDue.text) && taskDue.text.trim().length > 0)
                    && workspace.validTelegram(taskTelegram.text)
         modal: true
@@ -825,6 +903,32 @@ ApplicationWindow {
         ColumnLayout {
             anchors.fill: parent
             spacing: 11
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.editTaskId === 0
+                spacing: 5
+                Label { text: "Доска"; color: root.secondary }
+                ComboBox {
+                    id: createBoard
+                    Layout.fillWidth: true
+                    model: root.boardData.map(function(b) { return b.name })
+                    currentIndex: root.boardData.findIndex(function(b) { return b.id===root.createBoardId })
+                    onActivated: function(i) {
+                        root.createBoardId=root.boardData[i].id
+                        var lanes=workspace.lanes(root.createBoardId)
+                        root.createLaneId=lanes.length ? lanes[0].id : 0
+                    }
+                }
+                Label { text: "Колонка"; color: root.secondary }
+                ComboBox {
+                    id: createLane
+                    Layout.fillWidth: true
+                    property var options: workspace.lanes(root.createBoardId)
+                    model: options.map(function(l) { return l.name })
+                    currentIndex: options.findIndex(function(l) { return l.id===root.createLaneId })
+                    onActivated: function(i) { root.createLaneId=options[i].id }
+                }
+            }
             Label { text: "Название задачи"; color: root.secondary }
             TextField2 { id: taskTitle; Layout.fillWidth: true; placeholderText: "Что нужно сделать?" }
             Label { text: "Описание"; color: root.secondary }
@@ -893,7 +997,7 @@ ApplicationWindow {
             if (root.editTaskId)
                 workspace.saveTaskDetails(root.editTaskId,taskTitle.text,taskBody.text,due,taskAccent.text,taskTelegram.text)
             else
-                workspace.addTaskDetails(root.editLaneId,taskTitle.text,taskBody.text,due,taskAccent.text,taskTelegram.text)
+                workspace.addTaskDetails(root.createLaneId,taskTitle.text,taskBody.text,due,taskAccent.text,taskTelegram.text)
         }
     }
     StyledDialog {
@@ -1059,7 +1163,7 @@ ApplicationWindow {
         anchors.centerIn: parent; width: 490
         ColumnLayout {
             anchors.fill: parent; spacing: 18
-            Label { text: "ВРЕМЯ ЗАДАЧИ ИСТЕКЛО"; color: "#e8a07c"; font.pixelSize: 19; font.bold: true }
+            Label { text: root.alarmAdvance ? "ДО СРОКА ОСТАЛОСЬ 15 МИНУТ" : "ВРЕМЯ ЗАДАЧИ ИСТЕКЛО"; color: "#e8a07c"; font.pixelSize: 19; font.bold: true }
             Label { id: alarmTitle; color: root.foreground; font.pixelSize: 18; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Label { id: alarmDue; color: root.secondary }
             RowLayout {
