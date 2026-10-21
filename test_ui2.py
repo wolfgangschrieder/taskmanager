@@ -54,6 +54,17 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.ws.task(task["id"])["title"], "Обновлённая заявка")
         self.assertEqual(len(self.ws.tasks(lane["id"])), 1)
 
+    def test_delete_empty_column_preserves_tasks(self):
+        board = self.ws.boards()[0]["id"]
+        self.ws.addLane(board, "Лишняя")
+        lane = next(x for x in self.ws.lanes(board) if x["name"] == "Лишняя")
+        self.assertTrue(self.ws.deleteEmptyLane(lane["id"]))
+        self.ws.addLane(board, "С задачей")
+        lane = next(x for x in self.ws.lanes(board) if x["name"] == "С задачей")
+        self.ws.addTask(lane["id"], "Не удалять", "", "", "")
+        self.assertFalse(self.ws.deleteEmptyLane(lane["id"]))
+        self.assertEqual(len(self.ws.tasks(lane["id"])), 1)
+
     def test_invalid_due_date_cannot_create_task(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
