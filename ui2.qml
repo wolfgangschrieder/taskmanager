@@ -417,7 +417,6 @@ ApplicationWindow {
                                                             taskStyleAccent.text=taskCard.modelData.color || ""
                                                             taskStyleTelegram.text=taskCard.modelData.telegram_url || ""
                                                             root.moveTaskBoardId = 0
-                                                            moveTaskBoard.currentIndex = -1
                                                             root.moveTaskBoardId = root.boardId
                                                             root.moveTaskLaneId = taskCard.modelData.lane_id
                                                             taskStyle.open()
