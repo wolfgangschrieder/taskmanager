@@ -290,6 +290,59 @@ class Workspace(QObject):
     def moveTask(self, task_id, lane_id):
         self._write("UPDATE tasks SET lane_id=? WHERE id=?", (lane_id,task_id))
 
+    @Slot(int, int, result=bool)
+    def reorderLane(self, source_id, target_id):
+        """Move a lane before the target lane, preserving all task records."""
+        source=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (source_id,)).fetchone()
+        target=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (target_id,)).fetchone()
+        if not source or not target or source[0] != target[0] or source_id == target_id:
+            return False
+        ids=[row[0] for row in self.db.execute(
+            "SELECT id FROM lanes WHERE board_id=? ORDER BY position,id", (source[0],))]
+        ids.remove(source_id)
+        ids.insert(ids.index(target_id), source_id)
+        with self.db:
+            for pos, lane_id in enumerate(ids):
+                self.db.execute("UPDATE lanes SET position=? WHERE id=?", (pos,lane_id))
+        self.changed.emit()
+        return True
+
+    @Slot(int, int, int, result=bool)
+    def dropTask(self, task_id, target_lane_id, before_task_id):
+        """Move a task to another column and/or reorder within a column."""
+        row=self.db.execute("SELECT lane_id FROM tasks WHERE id=?", (task_id,)).fetchone()
+        target=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (target_lane_id,)).fetchone()
+        if not row or not target:
+            return False
+        source_board=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (row[0],)).fetchone()
+        if not source_board or source_board[0] != target[0]:
+            return False
+        if before_task_id:
+            before=self.db.execute("SELECT lane_id FROM tasks WHERE id=?", (before_task_id,)).fetchone()
+            if not before or before[0] != target_lane_id or before_task_id == task_id:
+                return False
+        source_lane_id=row[0]
+        with self.db:
+            self.db.execute("UPDATE tasks SET lane_id=? WHERE id=?", (target_lane_id,task_id))
+            for lane_id in set((source_lane_id,target_lane_id)):
+                ids=[r[0] for r in self.db.execute(
+                    "SELECT id FROM tasks WHERE lane_id=? ORDER BY position,id", (lane_id,))]
+                if lane_id == target_lane_id:
+                    ids.remove(task_id)
+                    if before_task_id:
+                        ids.insert(ids.index(before_task_id),task_id)
+                    else:
+                        ids.append(task_id)
+                for pos, task in enumerate(ids):
+                    self.db.execute("UPDATE tasks SET position=? WHERE id=?", (pos,task))
+        self.changed.emit()
+        return True
+
+    @Slot(int, int)
+    def resizeLane(self, lane_id, width):
+        self._write("UPDATE lanes SET width=? WHERE id=?",
+                    (max(250,min(720,int(width))),lane_id))
+
     @Slot(result="QVariantMap")
     def appearance(self):
         try:
