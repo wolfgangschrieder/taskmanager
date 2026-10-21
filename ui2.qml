@@ -98,6 +98,14 @@ ApplicationWindow {
         var settings=workspace.appearance()
         if (settings.background) appBg=settings.background
         if (settings.accent && settings.accent[0]==="#") accent=settings.accent
+        bgInput.text=settings.background || "#0b111d"
+        accentInput.text=settings.accent || "#6fc4ff"
+        var d=settings.lane_defaults || {}
+        defaultLaneBg.text=d.background || "#192535"
+        defaultLaneFg.text=d.foreground || "#ecf2fb"
+        defaultLaneAccent.text=d.accent || "#79b7e8"
+        defaultLaneWidth.value=d.width || 320
+        defaultLaneTimer.checked=d.timer === undefined ? true : d.timer
         refresh()
     }
     Connections {
@@ -170,8 +178,6 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillHeight: true }
-                Label { text: "ЛОКАЛЬНЫЕ ДАННЫЕ"; color: root.secondary; font.pixelSize: 10 }
-                Label { text: "SQLite · без облака"; color: root.secondary; font.pixelSize: 12 }
             }
         }
         ColumnLayout {
@@ -447,24 +453,83 @@ ApplicationWindow {
                 Panel {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    ColumnLayout {
-                        anchors.margins: 24; anchors.fill: parent; spacing: 16
-                        Label { text: "Внешний вид рабочего пространства"; color: root.foreground; font.pixelSize: 20 }
-                        Label { text: "Цвета вводятся в формате #RRGGBB. Отдельные цвета колонок и задач задаются в их меню."; color: root.secondary; wrapMode: Text.WordWrap }
-                        Label { text: "Фон приложения"; color: root.secondary }
-                        TextField2 { id: bgInput; text: root.appBg.toString(); Layout.preferredWidth: 240 }
-                        Label { text: "Основной акцент"; color: root.secondary }
-                        TextField2 { id: accentInput; text: root.accent.toString(); Layout.preferredWidth: 240 }
-                        ActionButton {
-                            text: "Применить"
-                            onClicked: {
-                                if (/^#[0-9a-fA-F]{6}$/.test(bgInput.text) && /^#[0-9a-fA-F]{6}$/.test(accentInput.text)) {
-                                    root.appBg=bgInput.text;root.accent=accentInput.text
-                                    workspace.saveAppearance(bgInput.text,accentInput.text)
+                    ScrollView {
+                        anchors.fill: parent
+                        anchors.margins: 24
+                        clip: true
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        ColumnLayout {
+                            width: Math.min(760, Math.max(580, parent.width - 18))
+                            spacing: 18
+                            Label { text: "Персонализация"; color: root.foreground; font.pixelSize: 22; font.bold: true }
+                            Label {
+                                text: "Выбирай цвета нажатием на образцы — коды вводить необязательно."
+                                color: root.secondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                            }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: "#30435d" }
+                            Label { text: "Цветовая тема"; color: root.foreground; font.pixelSize: 18; font.bold: true }
+                            RowLayout {
+                                spacing: 10
+                                ActionButton { text: "Ночной синий"; onClicked: { bgInput.text="#0b111d"; accentInput.text="#6fc4ff" } }
+                                ActionButton { text: "Графит"; onClicked: { bgInput.text="#161a21"; accentInput.text="#9bafff" } }
+                                ActionButton { text: "Изумруд"; onClicked: { bgInput.text="#0e1b1b"; accentInput.text="#55c5ad" } }
+                            }
+                            Label { text: "Фон приложения"; color: root.secondary }
+                            ColorPicker { id: bgInput; Layout.fillWidth: true; placeholderText: "#0b111d" }
+                            Label { text: "Основной акцент"; color: root.secondary }
+                            ColorPicker { id: accentInput; Layout.fillWidth: true; placeholderText: "#6fc4ff" }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: "#30435d"; Layout.topMargin: 12 }
+                            Label { text: "Новые колонки"; color: root.foreground; font.pixelSize: 18; font.bold: true }
+                            Label {
+                                text: "Настройки применятся только к новым колонкам. Существующие останутся без изменений."
+                                color: root.secondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                            }
+                            Label { text: "Фон колонки"; color: root.secondary }
+                            ColorPicker { id: defaultLaneBg; Layout.fillWidth: true; placeholderText: "#192535" }
+                            Label { text: "Цвет текста"; color: root.secondary }
+                            ColorPicker { id: defaultLaneFg; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
+                            Label { text: "Цветовой маркер"; color: root.secondary }
+                            ColorPicker { id: defaultLaneAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+                            Label { text: "Ширина новой колонки"; color: root.secondary }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Slider { id: defaultLaneWidth; from: 250; to: 720; stepSize: 10; Layout.fillWidth: true }
+                                Label { text: Math.round(defaultLaneWidth.value) + " px"; color: root.foreground; Layout.preferredWidth: 72 }
+                            }
+                            CheckBox { id: defaultLaneTimer; text: "Включать контроль сроков"; checked: true; palette.text: root.foreground }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: "#30435d"; Layout.topMargin: 12 }
+                            Label { id: appearanceError; visible: text.length > 0; color: "#ff9b9b"; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                ActionButton {
+                                    text: "Сбросить"
+                                    onClicked: {
+                                        bgInput.text="#0b111d"; accentInput.text="#6fc4ff"
+                                        defaultLaneBg.text="#192535"; defaultLaneFg.text="#ecf2fb"
+                                        defaultLaneAccent.text="#79b7e8"; defaultLaneWidth.value=320
+                                        defaultLaneTimer.checked=true
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                ActionButton {
+                                    text: "Сохранить настройки"
+                                    highlighted: true
+                                    onClicked: {
+                                        var colors=[bgInput.text,accentInput.text,defaultLaneBg.text,defaultLaneFg.text,defaultLaneAccent.text]
+                                        if (!colors.every(function(c){ return /^#[0-9a-fA-F]{6}$/.test(c) })) {
+                                            appearanceError.text="Проверь цвета: выбери образец или введи код #RRGGBB."
+                                            return
+                                        }
+                                        appearanceError.text=""
+                                        root.appBg=bgInput.text; root.accent=accentInput.text
+                                        workspace.saveAppearance(bgInput.text,accentInput.text)
+                                        workspace.saveLaneDefaults(defaultLaneBg.text,defaultLaneFg.text,defaultLaneAccent.text,
+                                                                   Math.round(defaultLaneWidth.value),defaultLaneTimer.checked)
+                                    }
                                 }
                             }
+                            Item { Layout.preferredHeight: 24 }
                         }
-                        Item { Layout.fillHeight: true }
                     }
                 }
             }
