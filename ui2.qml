@@ -473,22 +473,85 @@ ApplicationWindow {
                 }
                 ColumnLayout {
                     spacing: 12
-                    Label { text: "Все доски · просроченные, сегодня и два следующих дня"; color: root.secondary; font.pixelSize: 13 }
+                    Label {
+                        text: "Задачи по срокам · все доски"
+                        color: root.secondary
+                        font.pixelSize: 13
+                    }
                     ListView {
-                        Layout.fillWidth: true; Layout.fillHeight: true
-                        clip: true; spacing: 9
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
                         model: root.scheduleData
-                        delegate: Panel {
+                        delegate: Item {
                             required property var modelData
                             width: ListView.view.width
-                            height: 65
-                            RowLayout {
-                                anchors.fill: parent; anchors.margins: 14; spacing: 16
-                                Label { text: root.deadlineText(modelData.due); color: root.accent; font.bold: true; Layout.preferredWidth: 105 }
-                                Label { text: modelData.title; color: root.foreground; Layout.fillWidth: true; elide: Text.ElideRight }
-                                Label { text: modelData.board_name+" / "+modelData.lane_name; color: root.secondary; font.pixelSize: 12 }
+                            height: modelData.is_header ? 60 : 92
+                            Label {
+                                visible: modelData.is_header
+                                anchors.left: parent.left
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 9
+                                text: modelData.heading || ""
+                                color: root.foreground
+                                font.pixelSize: 23
+                                font.bold: true
                             }
-                            MouseArea { anchors.fill: parent; onClicked: root.taskEditor(modelData,modelData.lane_id) }
+                            Panel {
+                                visible: !modelData.is_header
+                                anchors.fill: parent
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 15
+                                    spacing: 18
+                                    ColumnLayout {
+                                        Layout.preferredWidth: 115
+                                        spacing: 2
+                                        Label {
+                                            text: modelData.display_time || ""
+                                            color: root.accent
+                                            font.pixelSize: 24
+                                            font.bold: true
+                                        }
+                                        Label {
+                                            text: modelData.display_date || ""
+                                            color: root.secondary
+                                            font.pixelSize: 12
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        Label {
+                                            text: modelData.title || ""
+                                            color: root.foreground
+                                            font.pixelSize: 16
+                                            font.bold: true
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                        Label {
+                                            text: modelData.body || ""
+                                            visible: text.length > 0
+                                            color: root.secondary
+                                            opacity: 0.78
+                                            font.pixelSize: 13
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                    ActionButton {
+                                        visible: Boolean(modelData.telegram_url)
+                                        text: "К задаче ↗"
+                                        onClicked: workspace.openTelegram(modelData.telegram_url)
+                                    }
+                                    ActionButton {
+                                        text: "Изменить"
+                                        onClicked: root.taskEditor(modelData, modelData.lane_id)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
