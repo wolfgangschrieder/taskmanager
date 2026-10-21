@@ -505,7 +505,7 @@ ApplicationWindow {
             TextField2 { id: taskDue; Layout.fillWidth: true; placeholderText: "2026-10-20 14:00" }
             Label { visible: !workspace.validDue(taskDue.text); text: "Проверь дату: ГГГГ-ММ-ДД ЧЧ:ММ"; color: "#ff8999" }
             Label { text: "Цветовой маркер (#RRGGBB)"; color: root.secondary }
-            TextField2 { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+            ColorPicker { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
         }
         onAccepted: {
             var due=taskDue.text.trim().replace(" ","T")
@@ -519,11 +519,11 @@ ApplicationWindow {
         ColumnLayout {
             anchors.fill: parent; spacing: 12
             Label { text: "Фон колонки"; color: root.secondary }
-            TextField2 { id: laneBackground; Layout.fillWidth: true; placeholderText: "#192535" }
+            ColorPicker { id: laneBackground; Layout.fillWidth: true; placeholderText: "#192535" }
             Label { text: "Цвет текста"; color: root.secondary }
-            TextField2 { id: laneForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
+            ColorPicker { id: laneForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
             Label { text: "Цветовой маркер"; color: root.secondary }
-            TextField2 { id: laneAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+            ColorPicker { id: laneAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
             Label { text: "Ширина колонки"; color: root.secondary }
             Slider { id: laneWidth; from: 250; to: 600; stepSize: 10; Layout.fillWidth: true }
             Label { text: Math.round(laneWidth.value)+" px"; color: root.foreground }
@@ -563,11 +563,11 @@ ApplicationWindow {
         ColumnLayout {
             anchors.fill: parent; spacing: 12
             Label { text: "Фон карточки"; color: root.secondary }
-            TextField2 { id: taskStyleBackground; Layout.fillWidth: true; placeholderText: "#25364a" }
+            ColorPicker { id: taskStyleBackground; Layout.fillWidth: true; placeholderText: "#25364a" }
             Label { text: "Цвет текста"; color: root.secondary }
-            TextField2 { id: taskStyleForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
+            ColorPicker { id: taskStyleForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
             Label { text: "Цветовой маркер"; color: root.secondary }
-            TextField2 { id: taskStyleAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+            ColorPicker { id: taskStyleAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
             Label { text: "Ссылка Telegram на сообщение или чат"; color: root.secondary }
             TextField2 { id: taskStyleTelegram; Layout.fillWidth: true; placeholderText: "https://t.me/c/123456789/42" }
             Label { text: "На карточке появится кнопка «К задаче». Пустое поле убирает кнопку."; color: root.secondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
