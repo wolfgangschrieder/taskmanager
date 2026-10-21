@@ -474,6 +474,7 @@ ApplicationWindow {
     property string promptMode: "board"
     property int laneSettingsId: 0
     property int deleteLaneId: 0
+    property int deleteTaskId: 0
     StyledDialog {
         id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
         canSubmit: promptTitle.text.trim().length > 0
@@ -571,8 +572,44 @@ ApplicationWindow {
             Label { text: "Ссылка Telegram на сообщение или чат"; color: root.secondary }
             TextField2 { id: taskStyleTelegram; Layout.fillWidth: true; placeholderText: "https://t.me/c/123456789/42" }
             Label { text: "На карточке появится кнопка «К задаче». Пустое поле убирает кнопку."; color: root.secondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            RowLayout {
+                Layout.fillWidth: true
+                ActionButton {
+                    text: "Переименовать / изменить"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        var task = workspace.task(root.editTaskId)
+                        taskStyle.close()
+                        root.taskEditor(task, task.lane_id)
+                    }
+                }
+                ActionButton {
+                    text: "Удалить задачу"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        root.deleteTaskId = root.editTaskId
+                        taskStyle.close()
+                        confirmDeleteTask.open()
+                    }
+                }
+            }
         }
         onAccepted: workspace.configureTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text,taskStyleTelegram.text)
+    }
+    StyledDialog {
+        id: confirmDeleteTask
+        title: "Удалить задачу?"
+        modal: true
+        anchors.centerIn: parent
+        width: 430
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        Label {
+            text: "Задача будет удалена из колонки. Отменить это действие нельзя."
+            width: 360
+            color: root.foreground
+            wrapMode: Text.WordWrap
+        }
+        onAccepted: workspace.deleteTask(root.deleteTaskId)
     }
     StyledDialog {
         id: alarmDialog; title: "MANAGER HELPER / ТАЙМ-ЛИМИТ"; modal: true
