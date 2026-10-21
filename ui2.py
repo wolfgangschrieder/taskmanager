@@ -419,7 +419,7 @@ class Workspace(QObject):
         result=self._query("""
             SELECT tasks.* FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
             WHERE tasks.due IS NOT NULL AND REPLACE(tasks.due, ' ', 'T')<=? AND tasks.reminded=0
-            AND lanes.timer_enabled=1 ORDER BY tasks.due,tasks.id LIMIT 100
+            AND lanes.timer_enabled=1 ORDER BY REPLACE(tasks.due, ' ', 'T'),tasks.id LIMIT 100
         """, (now,))
         for task in result:
             if self._suppressed_alarms.get(task["id"], datetime.min) > datetime.now():
