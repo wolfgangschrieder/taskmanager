@@ -206,6 +206,14 @@ class Workspace(QObject):
             self._write("INSERT INTO lanes(board_id,name,position) VALUES(?,?,COALESCE((SELECT MAX(position)+1 FROM lanes WHERE board_id=?),0))",
                         (board_id,name.strip(),board_id))
 
+    @Slot(int, result=bool)
+    def deleteEmptyLane(self, lane_id):
+        """Only remove an empty column; never delete user tasks implicitly."""
+        if self.db.execute("SELECT 1 FROM tasks WHERE lane_id=? LIMIT 1", (lane_id,)).fetchone():
+            return False
+        self._write("DELETE FROM lanes WHERE id=?", (lane_id,))
+        return True
+
     @Slot(str)
     def addBoard(self, name):
         if name.strip():
