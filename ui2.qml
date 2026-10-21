@@ -473,6 +473,7 @@ ApplicationWindow {
 
     property string promptMode: "board"
     property int laneSettingsId: 0
+    property int deleteLaneId: 0
     StyledDialog {
         id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
         canSubmit: promptTitle.text.trim().length > 0
@@ -527,11 +528,34 @@ ApplicationWindow {
             Slider { id: laneWidth; from: 250; to: 600; stepSize: 10; Layout.fillWidth: true }
             Label { text: Math.round(laneWidth.value)+" px"; color: root.foreground }
             CheckBox { id: laneTimer; text: "Контролировать таймеры этой колонки"; checked: true }
+            ActionButton {
+                text: "Удалить пустую колонку"
+                onClicked: {
+                    root.deleteLaneId = root.laneSettingsId
+                    laneSettings.close()
+                    confirmDeleteLane.open()
+                }
+            }
         }
         onAccepted: {
             workspace.styleLane(root.laneSettingsId,laneBackground.text,laneForeground.text,laneAccent.text,Math.round(laneWidth.value))
             workspace.timerLane(root.laneSettingsId,laneTimer.checked)
         }
+    }
+    StyledDialog {
+        id: confirmDeleteLane
+        title: "Удалить колонку?"
+        modal: true
+        anchors.centerIn: parent
+        width: 420
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        Label {
+            text: "Удаляются только пустые колонки. Если внутри есть задачи, удаление будет отклонено."
+            width: 350
+            color: root.foreground
+            wrapMode: Text.WordWrap
+        }
+        onAccepted: workspace.deleteEmptyLane(root.deleteLaneId)
     }
     StyledDialog {
         id: taskStyle; title: "Настройки карточки"; modal: true; anchors.centerIn: parent; width: 430
