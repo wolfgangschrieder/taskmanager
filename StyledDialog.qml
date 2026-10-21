@@ -50,7 +50,7 @@ Dialog {
                 font.bold: true
             }
             Text {
-                text: "APEX  /  WORKSPACE"
+                text: "MANAGER HELPER  /  1.1"
                 color: "#7e9cba"
                 font.pixelSize: 10
                 font.letterSpacing: 1.2
