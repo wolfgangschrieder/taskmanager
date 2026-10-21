@@ -234,7 +234,7 @@ ApplicationWindow {
                                         target: workspace
                                         function onChanged() { lanePanel.loadTasks() }
                                     }
-                                    width: Math.max(270,Math.min(600,Math.max(modelData.width || 320, (boardScroll.width - 18 * Math.max(0,root.laneData.length-1)) / Math.max(1,root.laneData.length))))
+                                    width: Math.max(250, Math.min(720, Number(modelData.width || 320)))
                                     height: Math.max(190, Math.min(boardScroll.height - 8, laneColumn.implicitHeight+24))
                                     color: modelData.bg_color || root.surface
                                     Column {
@@ -536,11 +536,11 @@ ApplicationWindow {
             Label { text: "Цветовой маркер"; color: root.secondary }
             ColorPicker { id: laneAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
             Label { text: "Ширина колонки"; color: root.secondary }
-            Slider { id: laneWidth; from: 250; to: 600; stepSize: 10; Layout.fillWidth: true }
+            Slider { id: laneWidth; from: 250; to: 720; stepSize: 10; Layout.fillWidth: true }
             Label { text: Math.round(laneWidth.value)+" px"; color: root.foreground }
             CheckBox { id: laneTimer; text: "Контролировать таймеры этой колонки"; checked: true }
             ActionButton {
-                text: "Удалить пустую колонку"
+                text: "Удалить колонку и задачи"
                 onClicked: {
                     root.deleteLaneId = root.laneSettingsId
                     laneSettings.close()
@@ -555,18 +555,18 @@ ApplicationWindow {
     }
     StyledDialog {
         id: confirmDeleteLane
-        title: "Удалить колонку?"
+        title: "Удалить колонку со всеми задачами?"
         modal: true
         anchors.centerIn: parent
         width: 420
         standardButtons: Dialog.Ok | Dialog.Cancel
         Label {
-            text: "Удаляются только пустые колонки. Если внутри есть задачи, удаление будет отклонено."
+            text: "В колонке задач: " + workspace.laneTaskCount(root.deleteLaneId) + ". Колонка и все её задачи будут удалены без возможности отмены."
             width: 350
             color: root.foreground
             wrapMode: Text.WordWrap
         }
-        onAccepted: workspace.deleteEmptyLane(root.deleteLaneId)
+        onAccepted: workspace.deleteLane(root.deleteLaneId)
     }
     StyledDialog {
         id: taskStyle; title: "Настройки карточки"; modal: true; anchors.centerIn: parent; width: 430
