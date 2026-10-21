@@ -4,6 +4,7 @@ Runs against an isolated temporary database, never the user's workspace.
 """
 import os
 import json
+import sqlite3
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import tempfile
@@ -240,6 +241,28 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.resolveAlarm(seen[0], "open")
         self.ws.check_alarms()
         self.assertEqual(len(seen), 1)
+
+    def test_backup_contains_saved_data_and_passes_integrity_check(self):
+        self.ws.addBoard("Backup proof")
+        backup = self.root / "backups" / "manager-helper-manual-2026-10-22.db"
+        with patch.object(ui2, "datetime") as clock:
+            clock.now.return_value.strftime.return_value = "2026-10-22"
+            self.ws._backup("manual")
+        self.assertTrue(backup.exists())
+        with sqlite3.connect(backup) as snapshot:
+            self.assertEqual(snapshot.execute("PRAGMA quick_check").fetchone()[0], "ok")
+            self.assertIn("Backup proof", [row[0] for row in snapshot.execute("SELECT name FROM boards")])
+        self.assertEqual(list((self.root / "backups").glob(".backup-*.db")), [])
+
+    def test_failed_backup_does_not_publish_incomplete_snapshot(self):
+        destination = self.root / "backups" / "manager-helper-failure-2026-10-22.db"
+        with patch.object(ui2, "datetime") as clock:
+            clock.now.return_value.strftime.return_value = "2026-10-22"
+            with patch.object(self.ws.db.__class__, "backup", side_effect=sqlite3.DatabaseError("simulated")):
+                with self.assertRaises(sqlite3.DatabaseError):
+                    self.ws._backup("failure")
+        self.assertFalse(destination.exists())
+        self.assertEqual(list((self.root / "backups").glob(".backup-*.db")), [])
 
     def test_backup_and_migration_are_additive(self):
         self.assertTrue((self.root / "backups").is_dir())
