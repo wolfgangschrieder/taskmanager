@@ -3,6 +3,7 @@
 Runs against an isolated temporary database, never the user's workspace.
 """
 import os
+import json
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import tempfile
@@ -115,6 +116,17 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.saveLaneDefaults("#192535", "#ecf2fb", "#79b7e8", 320, True)
         unchanged = next(x for x in self.ws.lanes(board) if x["id"] == lane["id"])
         self.assertEqual(unchanged["width"], 530)
+
+    def test_settings_write_is_atomic_on_replace_failure(self):
+        self.ws.saveAppearance("#112233", "#445566")
+        original = ui2.SETTINGS.read_bytes()
+        with patch.object(ui2.os, "replace", side_effect=OSError("simulated failure")):
+            with self.assertRaises(OSError):
+                self.ws.saveLaneDefaults("#192535", "#ecf2fb", "#79b7e8", 450, True)
+        self.assertEqual(ui2.SETTINGS.read_bytes(), original)
+        self.assertEqual(list(self.root.glob(".settings-*.tmp")), [])
+        self.ws.saveLaneDefaults("#192535", "#ecf2fb", "#79b7e8", 450, True)
+        self.assertEqual(json.loads(ui2.SETTINGS.read_text(encoding="utf-8"))["lane_defaults"]["width"], 450)
 
     def test_lane_width_persists(self):
         board = self.ws.boards()[0]["id"]
