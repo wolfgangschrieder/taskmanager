@@ -10,14 +10,14 @@ RowLayout {
     property var colors: ["#192535", "#25364a", "#ecf2fb", "#79b7e8", "#55c5ad", "#f2bc73", "#ec839c", "#a38bff"]
     spacing: 8
     Row {
-        spacing: 5
+        spacing: 6
         Repeater {
             model: picker.colors
             delegate: Rectangle {
                 required property string modelData
-                width: 22
-                height: 22
-                radius: 7
+                width: 26
+                height: 26
+                radius: 8
                 color: modelData
                 border.width: picker.text.toLowerCase() === modelData.toLowerCase() ? 3 : 1
                 border.color: picker.text.toLowerCase() === modelData.toLowerCase() ? "#ffffff" : "#54667c"
