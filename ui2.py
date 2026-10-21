@@ -138,16 +138,39 @@ class Workspace(QObject):
 
     @Slot(result="QVariantList")
     def schedule(self):
-        now = datetime.now()
-        cutoff = (now + timedelta(days=3)).isoformat(timespec="minutes")
-        return self._query("""
+        today = datetime.now().date()
+        rows = self._query("""
             SELECT tasks.*, lanes.name AS lane_name, boards.name AS board_name
             FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
             JOIN boards ON lanes.board_id=boards.id
-            WHERE tasks.due IS NOT NULL AND REPLACE(tasks.due, ' ', 'T')<=?
+            WHERE tasks.due IS NOT NULL
             AND lanes.timer_enabled=1 AND tasks.reminded=0
             ORDER BY REPLACE(tasks.due, ' ', 'T'),tasks.id
-        """, (cutoff,))
+        """)
+        grouped = []
+        previous_day = None
+        for task in rows:
+            try:
+                due = datetime.strptime(task["due"].replace("T", " "), "%Y-%m-%d %H:%M")
+            except (ValueError, AttributeError):
+                continue
+            day = due.date()
+            if day != previous_day:
+                if day < today:
+                    heading = "Просроченные"
+                elif day == today:
+                    heading = "Сегодня"
+                elif day == today + timedelta(days=1):
+                    heading = "Завтра"
+                else:
+                    heading = day.strftime("%d/%m/%Y")
+                grouped.append({"is_header": True, "heading": heading, "due": ""})
+                previous_day = day
+            task["is_header"] = False
+            task["display_time"] = due.strftime("%H:%M")
+            task["display_date"] = due.strftime("%d/%m/%Y")
+            grouped.append(task)
+        return grouped
 
     @Slot(str, result=bool)
     def validDue(self, raw):
