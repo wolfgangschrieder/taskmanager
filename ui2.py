@@ -155,7 +155,8 @@ class Workspace(QObject):
             except (ValueError, AttributeError):
                 continue
             day = due.date()
-            if day != previous_day:
+            section = ("overdue" if day < today else day.isoformat())
+            if section != previous_day:
                 if day < today:
                     heading = "Просроченные"
                 elif day == today:
@@ -165,7 +166,7 @@ class Workspace(QObject):
                 else:
                     heading = day.strftime("%d/%m/%Y")
                 grouped.append({"is_header": True, "heading": heading, "due": ""})
-                previous_day = day
+                previous_day = section
             task["is_header"] = False
             task["display_time"] = due.strftime("%H:%M")
             task["display_date"] = due.strftime("%d/%m/%Y")
