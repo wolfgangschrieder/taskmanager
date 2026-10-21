@@ -54,6 +54,14 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.ws.task(task["id"])["title"], "Обновлённая заявка")
         self.assertEqual(len(self.ws.tasks(lane["id"])), 1)
 
+    def test_invalid_due_date_cannot_create_task(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.assertFalse(self.ws.validDue("2026-13-42 99:99"))
+        self.assertTrue(self.ws.validDue("2026-10-21 14:30"))
+        self.ws.addTask(lane, "Неверный срок", "", "2026-13-42 99:99", "")
+        self.assertEqual(self.ws.tasks(lane), [])
+
     def test_telegram_and_notes(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
