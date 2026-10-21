@@ -264,6 +264,28 @@ class WorkspaceTests(unittest.TestCase):
         self.assertFalse(destination.exists())
         self.assertEqual(list((self.root / "backups").glob(".backup-*.db")), [])
 
+    def test_reopen_preserves_lane_task_order_and_notes(self):
+        board = self.ws.boards()[0]["id"]
+        first_lane, second_lane = [lane["id"] for lane in self.ws.lanes(board)[:2]]
+        self.assertTrue(self.ws.reorderLane(second_lane, first_lane))
+        self.ws.addTask(second_lane, "First", "Body 1", "", "")
+        self.ws.addTask(second_lane, "Second", "Body 2", "", "")
+        first, second = [task["id"] for task in self.ws.tasks(second_lane)]
+        self.assertTrue(self.ws.dropTask(second, second_lane, first))
+        self.ws.resizeLane(second_lane, 510)
+        self.ws.addFolder("Persistent folder")
+        folder = next(f["id"] for f in self.ws.folders() if f["name"] == "Persistent folder")
+        self.ws.addNote(folder, "Persistent note", "Original")
+        note = self.ws.notes(folder)[0]["id"]
+        self.ws.saveNote(note, "Persistent note", "Updated")
+        self.ws._ticker.stop()
+        self.ws.db.close()
+        self.ws = ui2.Workspace()
+        self.assertEqual(self.ws.lanes(board)[0]["id"], second_lane)
+        self.assertEqual(self.ws.lanes(board)[0]["width"], 510)
+        self.assertEqual([t["id"] for t in self.ws.tasks(second_lane)], [second, first])
+        self.assertEqual(self.ws.note(note)["body"], "Updated")
+
     def test_backup_and_migration_are_additive(self):
         self.assertTrue((self.root / "backups").is_dir())
         self.ws.addBoard("Существующая")
