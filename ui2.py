@@ -265,12 +265,14 @@ class Workspace(QObject):
         result=self._query("""
             SELECT tasks.* FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
             WHERE tasks.due IS NOT NULL AND tasks.due<=? AND tasks.reminded=0
-            AND lanes.timer_enabled=1 ORDER BY tasks.due,tasks.id LIMIT 1
+            AND lanes.timer_enabled=1 ORDER BY tasks.due,tasks.id LIMIT 100
         """, (now,))
-        if result:
-            task=result[0]
+        for task in result:
+            if self._suppressed_alarms.get(task["id"], datetime.min) > datetime.now():
+                continue
             self._pending_alarm=task["id"]
             self.alarmRaised.emit(task["id"],task["title"],task["due"])
+            break
 
     @Slot(int, str)
     def resolveAlarm(self, task_id, action):
