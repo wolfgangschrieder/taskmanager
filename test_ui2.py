@@ -160,6 +160,19 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.resizeLane(b,580)
         self.assertEqual(next(x["width"] for x in self.ws.lanes(board) if x["id"]==b),580)
 
+    def test_cross_board_drop_is_rejected_without_data_loss(self):
+        original_board = self.ws.boards()[0]["id"]
+        source_lane = self.ws.lanes(original_board)[0]["id"]
+        self.ws.addBoard("Separate board")
+        second_board = next(b["id"] for b in self.ws.boards() if b["name"] == "Separate board")
+        self.ws.addLane(second_board, "Destination")
+        target_lane = self.ws.lanes(second_board)[0]["id"]
+        self.ws.addTask(source_lane, "Must stay", "Important", "", "")
+        task = next(t for t in self.ws.tasks(source_lane) if t["title"] == "Must stay")
+        self.assertFalse(self.ws.dropTask(task["id"], target_lane, 0))
+        self.assertEqual(self.ws.task(task["id"])["lane_id"], source_lane)
+        self.assertEqual(self.ws.tasks(target_lane), [])
+
     def test_new_tasks_append_after_reordering(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
