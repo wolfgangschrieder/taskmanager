@@ -354,6 +354,8 @@ ApplicationWindow {
                                                 property int taskId: modelData.id
                                                 property bool overdue: workspace.isOverdue(modelData.due || "")
                                                  property bool wasDragged: false
+                                                property real dragStartX: 0
+                                                property real dragStartY: 0
                                                 Drag.active: taskDrag.active
                                                 Drag.source: taskCard
                                                 Drag.keys: ["manager-task"]
@@ -363,10 +365,14 @@ ApplicationWindow {
                                                     id: taskDrag
                                                     target: taskCard
                                                     onActiveChanged: {
-                                                        if (active) taskCard.wasDragged = true
-                                                        else {
+                                                        if (active) {
+                                                            taskCard.wasDragged = true
+                                                            taskCard.dragStartX = taskCard.x
+                                                            taskCard.dragStartY = taskCard.y
+                                                        } else {
                                                             taskCard.Drag.drop()
-                                                            taskCard.x = 0
+                                                            taskCard.x = taskCard.dragStartX
+                                                            taskCard.y = taskCard.dragStartY
                                                         }
                                                     }
                                                     acceptedButtons: Qt.LeftButton
@@ -415,6 +421,7 @@ ApplicationWindow {
                                                     anchors.fill: parent
                                                     anchors.rightMargin: taskCard.modelData.telegram_url ? 108 : 0
                                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                    preventStealing: false
                                                     onPressed: taskCard.wasDragged = false
                                                     onClicked: function(mouse) {
                                                         if (taskCard.wasDragged) return
