@@ -54,6 +54,18 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.ws.task(task["id"])["title"], "Обновлённая заявка")
         self.assertEqual(len(self.ws.tasks(lane["id"])), 1)
 
+    def test_delete_task_only_removes_selected_task(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Оставить", "", "", "")
+        self.ws.addTask(lane, "Удалить", "", "", "")
+        tasks = self.ws.tasks(lane)
+        target = next(task for task in tasks if task["title"] == "Удалить")
+        self.ws.deleteTask(target["id"])
+        remaining = self.ws.tasks(lane)
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["title"], "Оставить")
+
     def test_delete_empty_column_preserves_tasks(self):
         board = self.ws.boards()[0]["id"]
         self.ws.addLane(board, "Лишняя")
