@@ -9,7 +9,7 @@ ApplicationWindow {
     visibility: Window.Maximized
     minimumWidth: 900
     minimumHeight: 640
-    title: "APEX — Рабочее пространство"
+    title: "Manager Helper 1.1"
     color: appBg
     property color appBg: "#101720"
     property color surface: "#192431"
@@ -164,9 +164,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 22
                 spacing: 13
-                Label { text: "APEX"; color: root.foreground; font.pixelSize: 26; font.bold: true }
-                Label { text: "WORKSPACE"; color: root.accent; font.pixelSize: 12; font.bold: true }
-                Label { text: "ЗАДАЧИ · ЗАМЕТКИ · СРОКИ"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 0.5 }
+                Label { text: "Manager Helper"; color: root.foreground; font.pixelSize: 21; font.bold: true }
+                Label { text: "1.1"; color: root.secondary; font.pixelSize: 12 }
                 Item { Layout.preferredHeight: 14 }
                 Repeater {
                     model: ["Доски","Расписание","Блокнот","Оформление"]
@@ -313,10 +312,17 @@ ApplicationWindow {
                                                 Drag.hotSpot.x: width / 2
                                                 Drag.hotSpot.y: height / 2
                                                 Label { anchors.centerIn: parent; text: "⠿"; color: root.foreground; font.pixelSize: 18 }
-                                                DragHandler { id: laneDrag; target: null; cursorShape: Qt.OpenHandCursor }
-                                                transform: Translate {
-                                                    x: laneDrag.active ? laneDrag.translation.x : 0
-                                                    y: laneDrag.active ? laneDrag.translation.y : 0
+                                                DragHandler {
+                                                    id: laneDrag
+                                                    target: laneGrip
+                                                    cursorShape: Qt.OpenHandCursor
+                                                    onActiveChanged: {
+                                                        if (!active) {
+                                                            laneGrip.Drag.drop()
+                                                            laneGrip.x = 0
+                                                            laneGrip.y = 0
+                                                        }
+                                                    }
                                                 }
                                             }
                                             Label {
@@ -355,14 +361,16 @@ ApplicationWindow {
                                                 Drag.hotSpot.y: height / 2
                                                 DragHandler {
                                                     id: taskDrag
-                                                    target: null
-                                                    onActiveChanged: { if (active) taskCard.wasDragged = true }
+                                                    target: taskCard
+                                                    onActiveChanged: {
+                                                        if (active) taskCard.wasDragged = true
+                                                        else {
+                                                            taskCard.Drag.drop()
+                                                            taskCard.x = 0
+                                                        }
+                                                    }
                                                     acceptedButtons: Qt.LeftButton
                                                     grabPermissions: PointerHandler.CanTakeOverFromAnything
-                                                }
-                                                transform: Translate {
-                                                    x: taskDrag.active ? taskDrag.translation.x : 0
-                                                    y: taskDrag.active ? taskDrag.translation.y : 0
                                                 }
                                                 z: taskDrag.active ? 30 : 0
                                                 DropArea {
