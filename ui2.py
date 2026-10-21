@@ -19,6 +19,7 @@ SETTINGS = ROOT / "settings.json"
 class Workspace(QObject):
     changed = Signal()
     alarmRaised = Signal(int, str, str)
+    reminderRaised = Signal(int, str, str)
 
     def __init__(self):
         super().__init__()
@@ -58,6 +59,8 @@ class Workspace(QObject):
         if "width" not in cols:
             self.db.execute("ALTER TABLE lanes ADD COLUMN width INTEGER DEFAULT 320")
         task_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(tasks)")}
+        if "alert15_sent" not in task_cols:
+            self.db.execute("ALTER TABLE tasks ADD COLUMN alert15_sent INTEGER DEFAULT 0")
         if "telegram_url" not in task_cols:
             self.db.execute("ALTER TABLE tasks ADD COLUMN telegram_url TEXT DEFAULT ''")
         if not self.db.execute("SELECT 1 FROM boards").fetchone():
@@ -191,9 +194,9 @@ class Workspace(QObject):
             return
         if task_id:
             self._write("""UPDATE tasks SET title=?,body=?,due=?,color=?,
-                        reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END
+                        reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END, alert15_sent=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN alert15_sent ELSE 0 END, alert15_sent=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN alert15_sent ELSE 0 END
                         WHERE id=?""",
-                        (title,body,due or None,color,due or None,task_id))
+                        (title,body,due or None,color,due or None,due or None,task_id))
 
     @Slot(int, str, str, str, str)
     def addTask(self, lane_id, title, body, due, color):
@@ -212,7 +215,7 @@ class Workspace(QObject):
         self._write("""UPDATE tasks SET title=?,body=?,due=?,color=?,telegram_url=?,
                      reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END
                      WHERE id=?""",
-                    (title.strip(), body, due or None, color, normalized, due or None, task_id))
+                    (title.strip(), body, due or None, color, normalized, due or None, due or None, task_id))
 
     @Slot(int, str, str, str, str, str)
     def addTaskDetails(self, lane_id, title, body, due, color, telegram_url):
@@ -457,6 +460,33 @@ class Workspace(QObject):
         self.changed.emit()
         return True
 
+    @Slot(int, result=bool)
+    def completeTask(self, task_id):
+        with self.db:
+            result = self.db.execute(
+                "UPDATE tasks SET due=NULL,reminded=1,alert15_sent=1 WHERE id=?", (task_id,))
+        if result.rowcount:
+            self.changed.emit()
+        return bool(result.rowcount)
+
+    @Slot(int, result=bool)
+    def duplicateTask(self, task_id):
+        task = self.db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+        if task is None:
+            return False
+        with self.db:
+            self.db.execute("""
+                INSERT INTO tasks(lane_id,title,body,checklist,due,reminded,position,
+                    color,bg_color,text_color,telegram_url,alert15_sent)
+                VALUES(?,?,?,?,?,0,?,?,?,?,?,0)
+            """, (task["lane_id"], task["title"], task["body"], task["checklist"],
+                  task["due"], (self.db.execute(
+                      "SELECT COALESCE(MAX(position)+1,0) FROM tasks WHERE lane_id=?",
+                      (task["lane_id"],)).fetchone()[0]), task["color"], task["bg_color"],
+                  task["text_color"], task["telegram_url"]))
+        self.changed.emit()
+        return True
+
     @Slot(int, int, result=bool)
     def moveTaskToLane(self, task_id, lane_id):
         """Explicit destination selector, including a different board."""
@@ -528,33 +558,50 @@ class Workspace(QObject):
     def check_alarms(self):
         if self._pending_alarm is not None:
             return
-        now=datetime.now().isoformat(timespec="minutes")
-        result=self._query("""
+        now = datetime.now()
+        now_iso = now.isoformat(timespec="minutes")
+        pre_iso = (now + timedelta(minutes=15)).isoformat(timespec="minutes")
+        # Due alarms take precedence over advance reminders.
+        due = self._query("""
             SELECT tasks.* FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
-            WHERE tasks.due IS NOT NULL AND REPLACE(tasks.due, ' ', 'T')<=? AND tasks.reminded=0
-            AND lanes.timer_enabled=1 ORDER BY REPLACE(tasks.due, ' ', 'T'),tasks.id LIMIT 100
-        """, (now,))
-        for task in result:
-            if self._suppressed_alarms.get(task["id"], datetime.min) > datetime.now():
+            WHERE tasks.due IS NOT NULL AND REPLACE(tasks.due,' ','T')<=?
+            AND tasks.reminded=0 AND lanes.timer_enabled=1
+            ORDER BY REPLACE(tasks.due,' ','T'),tasks.id LIMIT 100
+        """, (now_iso,))
+        for task in due:
+            if self._suppressed_alarms.get(task["id"], datetime.min) > now:
                 continue
-            self._pending_alarm=task["id"]
-            self.alarmRaised.emit(task["id"],task["title"],task["due"])
-            break
+            self._pending_alarm = task["id"]
+            self.alarmRaised.emit(task["id"], task["title"], task["due"])
+            return
+        upcoming = self._query("""
+            SELECT tasks.* FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
+            WHERE tasks.due IS NOT NULL
+            AND REPLACE(tasks.due,' ','T')>? AND REPLACE(tasks.due,' ','T')<=?
+            AND tasks.reminded=0 AND tasks.alert15_sent=0 AND lanes.timer_enabled=1
+            ORDER BY REPLACE(tasks.due,' ','T'),tasks.id LIMIT 1
+        """, (now_iso, pre_iso))
+        if upcoming:
+            task = upcoming[0]
+            self._write("UPDATE tasks SET alert15_sent=1 WHERE id=?", (task["id"],))
+            self._pending_alarm = task["id"]
+            self.reminderRaised.emit(task["id"], task["title"], task["due"])
 
     @Slot(int, str)
     def resolveAlarm(self, task_id, action):
         if task_id != self._pending_alarm:
             return
-        if action=="done":
-            self._write("UPDATE tasks SET due=NULL, reminded=1 WHERE id=?", (task_id,))
-        elif action=="snooze":
-            due=(datetime.now()+timedelta(minutes=15)).isoformat(timespec="minutes")
-            self._write("UPDATE tasks SET due=?,reminded=0 WHERE id=?", (due,task_id))
-        elif action=="open":
+        if action == "done":
+            self.completeTask(task_id)
+        elif action == "snooze":
+            due = (datetime.now() + timedelta(minutes=15)).isoformat(timespec="minutes")
+            self._write("UPDATE tasks SET due=?,reminded=0,alert15_sent=1 WHERE id=?",
+                        (due, task_id))
+        elif action == "open":
             self._suppressed_alarms[task_id] = datetime.now() + timedelta(minutes=5)
-        self._pending_alarm=None
-        if action!="open":
-            QTimer.singleShot(1000,self.check_alarms)
+        self._pending_alarm = None
+        if action != "open":
+            QTimer.singleShot(1000, self.check_alarms)
 
 
 def main():
