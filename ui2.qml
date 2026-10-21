@@ -57,6 +57,8 @@ ApplicationWindow {
     property var folderData: []
     property var noteData: []
     property var scheduleData: []
+    property var allTaskData: []
+    property string globalQuery: ""
 
     function refresh() {
         boardData = workspace.boards()
@@ -66,6 +68,7 @@ ApplicationWindow {
         if (!folderId && folderData.length) folderId=folderData[0].id
         noteData=workspace.notes(folderId)
         scheduleData=workspace.schedule()
+        allTaskData=workspace.allTasks(globalQuery)
     }
     function smokeCrud() {
         var b = root.boardData[0].id
@@ -123,6 +126,17 @@ ApplicationWindow {
             }
         }
         taskDialog.open()
+    }
+    Shortcut {
+        sequences: ["Ctrl+F"]
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            root.globalQuery = ""
+            searchInput.text = ""
+            root.refresh()
+            searchDialog.open()
+            searchInput.forceActiveFocus()
+        }
     }
     Shortcut {
         sequences: ["Ctrl+N"]
@@ -193,6 +207,64 @@ ApplicationWindow {
         }
     }
 
+    component TaskIndexRow: Rectangle {
+        required property var taskData
+        radius: 10
+        color: "#1b2a3a"
+        border.color: "#34495d"
+        height: 86
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 12
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 5
+                Label {
+                    Layout.fillWidth: true
+                    text: taskData.title || ""
+                    color: root.foreground
+                    font.pixelSize: 16
+                    font.bold: true
+                    elide: Text.ElideRight
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: (taskData.body ? taskData.body.replace(/\\s+/g," ").slice(0,110) + " · " : "") +
+                          taskData.board_name + " / " + taskData.lane_name
+                    color: root.secondary
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                }
+            }
+            ColumnLayout {
+                Layout.preferredWidth: 155
+                spacing: 3
+                Label {
+                    text: taskData.created_at ?
+                        "Создана: " + root.createdText(taskData.created_at) : "Дата создания неизвестна"
+                    color: root.secondary
+                    font.pixelSize: 11
+                }
+                Label {
+                    visible: Boolean(taskData.due)
+                    text: taskData.due ? "Срок: " + taskData.due.replace("T"," ") : ""
+                    color: root.accent
+                    font.pixelSize: 11
+                }
+            }
+            ActionButton {
+                text: "Открыть"
+                onClicked: root.taskEditor(workspace.task(taskData.id), taskData.lane_id)
+            }
+        }
+    }
+    function createdText(raw) {
+        if (!raw) return "неизвестно"
+        var parts=raw.replace("T"," ").split(" ")
+        var d=parts[0].split("-")
+        return d.length===3 ? d[2]+"/"+d[1]+"/"+d[0]+" "+(parts[1] || "").slice(0,5) : raw
+    }
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -209,12 +281,12 @@ ApplicationWindow {
                 Label { text: "1.1"; color: root.secondary; font.pixelSize: 12 }
                 Item { Layout.preferredHeight: 14 }
                 Repeater {
-                    model: ["Доски","Расписание","Блокнот","Оформление"]
+                    model: ["Доски","Расписание","Блокнот","Оформление","Все задачи"]
                     delegate: ActionButton {
                         required property int index
                         required property string modelData
                         Layout.fillWidth: true
-                        text: ["▦  ", "◷  ", "▤  ", "⚙  "][index] + modelData
+                        text: ["▦  ", "◷  ", "▤  ", "⚙  ", "☷  "][index] + modelData
                         highlighted: root.page===index
                         onClicked: root.page=index
                     }
@@ -230,7 +302,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Label {
-                    text: ["Рабочие доски","Расписание","Блокнот","Оформление"][root.page]
+                    text: ["Рабочие доски","Расписание","Блокнот","Оформление","Все задачи"][root.page]
                     color: root.foreground; font.pixelSize: 27; font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
@@ -791,7 +863,70 @@ ApplicationWindow {
                         }
                     }
                 }
+                ColumnLayout {
+                    spacing: 12
+                    Label {
+                        text: root.allTaskData.length + " задач · от новых к старым"
+                        color: root.secondary
+                        font.pixelSize: 13
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: root.allTaskData
+                        delegate: TaskIndexRow {
+                            required property var modelData
+                            taskData: modelData
+                            width: ListView.view.width
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    StyledDialog {
+        id: searchDialog
+        title: "Поиск по всем задачам"
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(820, root.width - 80)
+        height: Math.min(680, root.height - 80)
+        standardButtons: Dialog.Close
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+            TextField2 {
+                id: searchInput
+                Layout.fillWidth: true
+                placeholderText: "Название, описание или ссылка Telegram"
+                onTextChanged: {
+                    root.globalQuery = text
+                    root.allTaskData = workspace.allTasks(text)
+                }
+            }
+            Label {
+                text: root.allTaskData.length + " задач · новые сверху"
+                color: root.secondary
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 8
+                model: root.allTaskData
+                delegate: TaskIndexRow {
+                    required property var modelData
+                    taskData: modelData
+                    width: ListView.view.width
+                }
+            }
+        }
+        onClosed: {
+            root.globalQuery = ""
+            root.allTaskData = workspace.allTasks("")
         }
     }
 
@@ -926,6 +1061,15 @@ ApplicationWindow {
                     currentIndex: options.findIndex(function(l) { return l.id===root.createLaneId })
                     onActivated: function(i) { root.createLaneId=options[i].id }
                 }
+            }
+            Label {
+                visible: root.editTaskId > 0
+                text: {
+                    var t = root.editTaskId > 0 ? workspace.task(root.editTaskId) : null
+                    return t ? "Создана: " + (t.created_at ? root.createdText(t.created_at) : "дата неизвестна (старая задача)") : ""
+                }
+                color: root.secondary
+                font.pixelSize: 12
             }
             Label { text: "Название задачи"; color: root.secondary }
             TextField2 { id: taskTitle; Layout.fillWidth: true; placeholderText: "Что нужно сделать?" }
