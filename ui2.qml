@@ -335,6 +335,7 @@ ApplicationWindow {
                                                 id: taskCard
                                                 required property var modelData
                                                 property int taskId: modelData.id
+                                                 property bool wasDragged: false
                                                 Drag.active: taskDrag.active
                                                 Drag.source: taskCard
                                                 Drag.keys: ["manager-task"]
@@ -343,6 +344,7 @@ ApplicationWindow {
                                                 DragHandler {
                                                     id: taskDrag
                                                     target: null
+                                                    onActiveChanged: { if (active) taskCard.wasDragged = true }
                                                     acceptedButtons: Qt.LeftButton
                                                     grabPermissions: PointerHandler.CanTakeOverFromAnything
                                                 }
@@ -393,7 +395,9 @@ ApplicationWindow {
                                                     anchors.fill: parent
                                                     anchors.rightMargin: taskCard.modelData.telegram_url ? 108 : 0
                                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                    onPressed: taskCard.wasDragged = false
                                                     onClicked: function(mouse) {
+                                                        if (taskCard.wasDragged) return
                                                         if (mouse.button===Qt.RightButton) {
                                                             root.editTaskId=taskCard.modelData.id
                                                             taskStyleBackground.text=taskCard.modelData.bg_color || ""
