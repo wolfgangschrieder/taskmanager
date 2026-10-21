@@ -198,6 +198,16 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.check_alarms()
         self.assertEqual(seen, ["ISO deadline"])
 
+    def test_oldest_overdue_alarm_wins_across_date_formats(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Later ISO", "", "2020-01-02T09:00", "")
+        self.ws.addTask(lane, "Earlier space", "", "2020-01-01 09:00", "")
+        raised = []
+        self.ws.alarmRaised.connect(lambda task_id, title, due: raised.append(title))
+        self.ws.check_alarms()
+        self.assertEqual(raised, ["Earlier space"])
+
     def test_self_drop_rejected_without_reordering(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
