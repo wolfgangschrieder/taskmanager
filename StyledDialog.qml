@@ -55,31 +55,51 @@ Dialog {
             }
         }
     }
-    footer: DialogButtonBox {
-        id: actions
-        padding: 18
-        spacing: 12
-        background: Rectangle { color: "transparent" }
-        standardButtons: dialog.standardButtons
-        // DialogButtonBox is connected to Dialog automatically
-
-        delegate: Button {
-            id: actionButton
-            implicitWidth: 128
-            implicitHeight: 40
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            contentItem: Text {
-                text: actionButton.text === "Save" ? "Сохранить" : actionButton.text === "Cancel" ? "Отмена" : actionButton.text === "OK" ? "Создать" : actionButton.text
-                color: "#f0f5ff"
-                font: actionButton.font
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+    footer: Rectangle {
+        implicitHeight: dialog.standardButtons === 0 ? 0 : 70
+        visible: dialog.standardButtons !== 0
+        color: "transparent"
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 20
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 12
+            Button {
+                id: cancelButton
+                text: "Отмена"
+                width: 120
+                height: 40
+                onClicked: dialog.reject()
+                contentItem: Text {
+                    text: cancelButton.text
+                    color: "#b4c7df"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 10
+                    color: cancelButton.hovered ? "#30445c" : "#1b2b40"
+                    border.color: "#36506b"
+                }
             }
-            background: Rectangle {
-                radius: 10
-                color: actionButton.down ? "#305d80" : actionButton.hovered ? "#2d4f6d" : "#213a54"
-                border.color: actionButton.hovered ? "#71c6ff" : "#3c5c7c"
+            Button {
+                id: saveButton
+                text: (dialog.standardButtons & Dialog.Ok) !== 0 ? "Создать" : "Сохранить"
+                width: 138
+                height: 40
+                onClicked: dialog.accept()
+                contentItem: Text {
+                    text: saveButton.text
+                    color: "#071827"
+                    font.pixelSize: 14
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 10
+                    color: saveButton.down ? "#51a6de" : saveButton.hovered ? "#94d8ff" : "#6fc4ff"
+                }
             }
         }
     }
