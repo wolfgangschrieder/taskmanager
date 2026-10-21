@@ -507,6 +507,16 @@ ApplicationWindow {
             Label { visible: !workspace.validDue(taskDue.text); text: "Проверь дату: ГГГГ-ММ-ДД ЧЧ:ММ"; color: "#ff8999" }
             Label { text: "Цветовой маркер (#RRGGBB)"; color: root.secondary }
             ColorPicker { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
+            ActionButton {
+                text: "Удалить эту задачу"
+                visible: root.editTaskId > 0
+                Layout.fillWidth: true
+                onClicked: {
+                    root.deleteTaskId = root.editTaskId
+                    taskDialog.close()
+                    confirmDeleteTask.open()
+                }
+            }
         }
         onAccepted: {
             var due=taskDue.text.trim().replace(" ","T")
