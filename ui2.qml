@@ -475,6 +475,7 @@ ApplicationWindow {
     property int laneSettingsId: 0
     StyledDialog {
         id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
+        canSubmit: promptTitle.text.trim().length > 0
         width: 400; standardButtons: Dialog.Ok | Dialog.Cancel
         ColumnLayout { anchors.fill: parent; TextField2 { id: promptTitle; Layout.fillWidth: true; placeholderText: "Название" } }
         onAccepted: {
@@ -485,6 +486,7 @@ ApplicationWindow {
     }
     StyledDialog {
         id: taskDialog; title: root.editTaskId ? "Редактировать задачу" : "Новая задача"
+        canSubmit: taskTitle.text.trim().length > 0 && workspace.validDue(taskDue.text)
         modal: true; anchors.centerIn: parent; width: 550
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
@@ -500,6 +502,7 @@ ApplicationWindow {
             }
             Label { text: "Дедлайн: ГГГГ-ММ-ДД ЧЧ:ММ (пусто — без срока)"; color: root.secondary }
             TextField2 { id: taskDue; Layout.fillWidth: true; placeholderText: "2026-10-20 14:00" }
+            Label { visible: !workspace.validDue(taskDue.text); text: "Проверь дату: ГГГГ-ММ-ДД ЧЧ:ММ"; color: "#ff8999" }
             Label { text: "Цветовой маркер (#RRGGBB)"; color: root.secondary }
             TextField2 { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
         }
