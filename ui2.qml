@@ -1076,7 +1076,6 @@ ApplicationWindow {
             Label { text: "Описание"; color: root.secondary }
             RowLayout {
                 Layout.fillWidth: true
-                Label { text: "Описание"; color: root.secondary; visible: false }
                 Item { Layout.fillWidth: true }
                 CheckBox {
                     id: taskWrapLines
