@@ -77,6 +77,25 @@ class WorkspaceTests(unittest.TestCase):
         self.assertFalse(self.ws.deleteEmptyLane(lane["id"]))
         self.assertEqual(len(self.ws.tasks(lane["id"])), 1)
 
+    def test_confirmed_column_deletion_removes_its_tasks_only(self):
+        board = self.ws.boards()[0]["id"]
+        self.ws.addLane(board, "Удаляемая")
+        self.ws.addLane(board, "Остаётся")
+        lanes = {x["name"]: x["id"] for x in self.ws.lanes(board)}
+        self.ws.addTask(lanes["Удаляемая"], "Уходит вместе с колонкой", "", "", "")
+        self.ws.addTask(lanes["Остаётся"], "Сохранить", "", "", "")
+        self.assertEqual(self.ws.laneTaskCount(lanes["Удаляемая"]), 1)
+        self.assertTrue(self.ws.deleteLane(lanes["Удаляемая"]))
+        self.assertNotIn("Удаляемая", [x["name"] for x in self.ws.lanes(board)])
+        self.assertEqual([x["title"] for x in self.ws.tasks(lanes["Остаётся"])], ["Сохранить"])
+
+    def test_lane_width_persists(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.styleLane(lane, "#192535", "#ecf2fb", "#79b7e8", 570)
+        saved = next(x for x in self.ws.lanes(board) if x["id"] == lane)
+        self.assertEqual(saved["width"], 570)
+
     def test_invalid_due_date_cannot_create_task(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
