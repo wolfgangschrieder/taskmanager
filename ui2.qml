@@ -408,13 +408,23 @@ ApplicationWindow {
                                                         color: taskCard.modelData.text_color || root.foreground
                                                         font.pixelSize: 14
                                                         font.weight: Font.DemiBold
+                                                        minimumPixelSize: 12
                                                         elide: Text.ElideRight
                                                     }
                                                     Label {
-                                                        visible: Boolean(taskCard.modelData.due)
-                                                        text: taskCard.overdue ? "⚠ Просрочено · " + root.deadlineText(taskCard.modelData.due) : root.deadlineText(taskCard.modelData.due)
-                                                        color: taskCard.overdue ? "#ff9ca5" : (taskCard.modelData.text_color || root.secondary)
-                                                        font.pixelSize: 11
+                                                        visible: taskCard.overdue
+                                                        text: "❗"
+                                                        color: "#ff9ca5"
+                                                        font.pixelSize: 17
+                                                        ToolTip.visible: overdueHover.hovered
+                                                        ToolTip.text: "Срок истёк: " + (taskCard.modelData.due || "").replace("T", " ")
+                                                        HoverHandler { id: overdueHover }
+                                                    }
+                                                    Label {
+                                                        visible: Boolean(taskCard.modelData.due) && !taskCard.overdue
+                                                        text: root.deadlineText(taskCard.modelData.due)
+                                                        color: taskCard.modelData.text_color || root.secondary
+                                                        font.pixelSize: 10
                                                     }
                                                 }
                                                 MouseArea {
