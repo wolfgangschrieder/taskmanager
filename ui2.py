@@ -214,9 +214,14 @@ class Workspace(QObject):
         if name.strip():
             self._write("UPDATE folders SET name=? WHERE id=?", (name.strip(),folder_id))
 
-    @Slot(int, str, str)
+    @Slot(int, str, str, result=int)
     def addNote(self, folder_id, title, body):
-        self._write("INSERT INTO notes(folder_id,title,body) VALUES(?,?,?)", (folder_id,title or "Новая запись",body))
+        with self.db:
+            cursor=self.db.execute("INSERT INTO notes(folder_id,title,body) VALUES(?,?,?)",
+                                   (folder_id,title or "Новая запись",body))
+            note_id=cursor.lastrowid
+        self.changed.emit()
+        return note_id
 
     @Slot(int, str, str)
     def saveNote(self, note_id, title, body):
