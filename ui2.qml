@@ -213,6 +213,14 @@ ApplicationWindow {
                         }
                         ActionButton { text: "+ Доска"; onClicked: { promptMode="board"; promptTitle.text=""; promptDialog.open() } }
                         ActionButton { text: "+ Колонка"; onClicked: { promptMode="lane"; promptTitle.text=""; promptDialog.open() } }
+                        ActionButton {
+                            text: "Удалить доску"
+                            enabled: root.boardId > 0
+                            onClicked: {
+                                root.deleteBoardId = root.boardId
+                                confirmDeleteBoard.open()
+                            }
+                        }
                         Item { Layout.fillWidth: true }
                         Label { text: root.laneData.length+" колонок"; color: root.secondary }
                     }
@@ -322,6 +330,7 @@ ApplicationWindow {
                                                 text: "···"
                                                 onClicked: {
                                                     laneSettingsId=lanePanel.modelData.id
+                                                    laneName.text=lanePanel.modelData.name
                                                     laneBackground.text=lanePanel.modelData.bg_color || ""
                                                     laneForeground.text=lanePanel.modelData.text_color || ""
                                                     laneAccent.text=lanePanel.modelData.color || ""
@@ -665,6 +674,7 @@ ApplicationWindow {
     property string promptMode: "board"
     property int laneSettingsId: 0
     property int deleteLaneId: 0
+    property int deleteBoardId: 0
     property int deleteTaskId: 0
     property int deleteFolderId: 0
     StyledDialog {
@@ -727,7 +737,7 @@ ApplicationWindow {
             TextArea {
                 id: taskBody
                 Layout.fillWidth: true
-                Layout.preferredHeight: 85
+                Layout.preferredHeight: 190
                 color: root.foreground
                 wrapMode: TextEdit.Wrap
                 placeholderTextColor: "#9bb0ca"
@@ -793,10 +803,12 @@ ApplicationWindow {
         }
     }
     StyledDialog {
-        id: laneSettings; title: "Оформление колонки"; modal: true; anchors.centerIn: parent; width: 440
+        id: laneSettings; title: "Настройки колонки"; modal: true; anchors.centerIn: parent; width: 440
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
             anchors.fill: parent; spacing: 12
+            Label { text: "Название колонки"; color: root.secondary }
+            TextField2 { id: laneName; Layout.fillWidth: true; placeholderText: "Название колонки" }
             Label { text: "Фон колонки — нажми на цвет"; color: root.secondary }
             ColorPicker { id: laneBackground; Layout.fillWidth: true; placeholderText: "#192535" }
             Label { text: "Цвет текста"; color: root.secondary }
@@ -817,8 +829,33 @@ ApplicationWindow {
             }
         }
         onAccepted: {
+            workspace.renameLane(root.laneSettingsId, laneName.text)
             workspace.styleLane(root.laneSettingsId,laneBackground.text,laneForeground.text,laneAccent.text,Math.round(laneWidth.value))
             workspace.timerLane(root.laneSettingsId,laneTimer.checked)
+        }
+    }
+    StyledDialog {
+        id: confirmDeleteBoard
+        confirmLabel: "Удалить"
+        title: "Удалить доску со всеми колонками?"
+        modal: true
+        anchors.centerIn: parent
+        width: 440
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        Label {
+            width: 370
+            color: root.foreground
+            wrapMode: Text.WordWrap
+            text: "Будут удалены все колонки и задачи этой доски (" +
+                  workspace.boardTaskCount(root.deleteBoardId) +
+                  " задач). Отменить удаление нельзя."
+        }
+        onAccepted: {
+            if (workspace.deleteBoard(root.deleteBoardId)) {
+                root.boardId = 0
+                root.refresh()
+            }
+            root.deleteBoardId = 0
         }
     }
     StyledDialog {
