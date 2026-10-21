@@ -35,6 +35,7 @@ class Workspace(QObject):
         self._migrate()
         self._backup("daily")
         self._pending_alarm = None
+        self._suppressed_alarms = {}
         self._ticker = QTimer(self)
         self._ticker.timeout.connect(self.check_alarms)
         self._ticker.start(15000)
