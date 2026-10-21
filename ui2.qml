@@ -243,12 +243,62 @@ ApplicationWindow {
                                     width: Math.max(250, Math.min(720, Number(modelData.width || 320)))
                                     height: Math.max(190, Math.min(boardScroll.height - 8, laneColumn.implicitHeight+24))
                                     color: modelData.bg_color || root.surface
+                                    DropArea {
+                                        anchors.fill: parent
+                                        keys: ["manager-lane", "manager-task"]
+                                        onDropped: function(drop) {
+                                            if (!drop.source) return
+                                            if (drop.source.laneId !== undefined)
+                                                workspace.reorderLane(drop.source.laneId, lanePanel.modelData.id)
+                                            else if (drop.source.taskId !== undefined)
+                                                workspace.dropTask(drop.source.taskId, lanePanel.modelData.id, 0)
+                                        }
+                                    }
+                                    Rectangle {
+                                        id: resizeGrip
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        width: 9
+                                        z: 20
+                                        color: resizeMouse.pressed ? root.accent : "transparent"
+                                        MouseArea {
+                                            id: resizeMouse
+                                            anchors.fill: parent
+                                            cursorShape: Qt.SizeHorCursor
+                                            property real startingWidth: 0
+                                            property real startingX: 0
+                                            onPressed: function(mouse) {
+                                                startingWidth=lanePanel.width
+                                                startingX=mapToItem(root.contentItem, mouse.x, mouse.y).x
+                                            }
+                                            onPositionChanged: function(mouse) {
+                                                if (!pressed) return
+                                                var x=mapToItem(root.contentItem, mouse.x, mouse.y).x
+                                                lanePanel.width=Math.max(250,Math.min(720,startingWidth+x-startingX))
+                                            }
+                                            onReleased: workspace.resizeLane(lanePanel.modelData.id, Math.round(lanePanel.width))
+                                        }
+                                    }
                                     Column {
                                         id: laneColumn
                                         x: 12; y: 12; width: parent.width-24
                                         spacing: 9
                                         RowLayout {
                                             width: parent.width
+                                            Rectangle {
+                                                id: laneGrip
+                                                width: 28; height: 28; radius: 7
+                                                color: laneDrag.active ? "#416889" : "#293c54"
+                                                property int laneId: lanePanel.modelData.id
+                                                Drag.active: laneDrag.active
+                                                Drag.source: laneGrip
+                                                Drag.keys: ["manager-lane"]
+                                                Drag.hotSpot.x: width / 2
+                                                Drag.hotSpot.y: height / 2
+                                                Label { anchors.centerIn: parent; text: "⠿"; color: root.foreground; font.pixelSize: 18 }
+                                                DragHandler { id: laneDrag; target: null; cursorShape: Qt.OpenHandCursor }
+                                            }
                                             Label {
                                                 text: lanePanel.modelData.name
                                                 color: lanePanel.modelData.text_color || root.foreground
@@ -274,6 +324,26 @@ ApplicationWindow {
                                             delegate: Rectangle {
                                                 id: taskCard
                                                 required property var modelData
+                                                property int taskId: modelData.id
+                                                Drag.active: taskDrag.active
+                                                Drag.source: taskCard
+                                                Drag.keys: ["manager-task"]
+                                                Drag.hotSpot.x: width / 2
+                                                Drag.hotSpot.y: height / 2
+                                                DragHandler {
+                                                    id: taskDrag
+                                                    target: null
+                                                    acceptedButtons: Qt.LeftButton
+                                                    grabPermissions: PointerHandler.CanTakeOverFromAnything
+                                                }
+                                                DropArea {
+                                                    anchors.fill: parent
+                                                    keys: ["manager-task"]
+                                                    onDropped: function(drop) {
+                                                        if (drop.source && drop.source.taskId !== undefined)
+                                                            workspace.dropTask(drop.source.taskId, lanePanel.modelData.id, taskCard.modelData.id)
+                                                    }
+                                                }
                                                 width: laneColumn.width
                                                 height: 72
                                                 radius: 12
