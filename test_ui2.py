@@ -40,6 +40,30 @@ class WorkspaceTests(unittest.TestCase):
             item.stop()
         self.temp.cleanup()
 
+    def test_global_index_creation_times_and_search(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTaskDetails(lane, "First request", "Alpha details", "", "", "")
+        self.ws.addTaskDetails(lane, "Second request", "Beta details", "", "", "https://t.me/example/123")
+        items = self.ws.allTasks("")
+        self.assertEqual([t["title"] for t in items[:2]], ["Second request", "First request"])
+        self.assertTrue(all(t["created_at"] for t in items))
+        self.assertEqual([t["title"] for t in self.ws.allTasks("Alpha")], ["First request"])
+        self.assertEqual([t["title"] for t in self.ws.allTasks("t.me/example")], ["Second request"])
+        self.assertEqual(self.ws.allTasks("unmatched"), [])
+        self.assertTrue(self.ws.duplicateTask(items[0]["id"]))
+        self.assertEqual(self.ws.allTasks("")[0]["title"], "Second request")
+        self.assertIsNotNone(self.ws.allTasks("")[0]["created_at"])
+
+    def test_old_task_creation_time_not_fabricated(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        with self.ws.db:
+            self.ws.db.execute("INSERT INTO tasks(lane_id,title) VALUES(?,?)",
+                               (lane, "Legacy"))
+        old = self.ws.allTasks("Legacy")[0]
+        self.assertIsNone(old["created_at"])
+
     def test_quick_actions_duplicate_and_complete(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
