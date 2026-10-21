@@ -128,9 +128,9 @@ class Workspace(QObject):
             SELECT tasks.*, lanes.name AS lane_name, boards.name AS board_name
             FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
             JOIN boards ON lanes.board_id=boards.id
-            WHERE tasks.due IS NOT NULL AND tasks.due<=?
+            WHERE tasks.due IS NOT NULL AND REPLACE(tasks.due, ' ', 'T')<=?
             AND lanes.timer_enabled=1 AND tasks.reminded=0
-            ORDER BY tasks.due,tasks.id
+            ORDER BY REPLACE(tasks.due, ' ', 'T'),tasks.id
         """, (cutoff,))
 
     @Slot(str, result=bool)
@@ -317,6 +317,8 @@ class Workspace(QObject):
         target=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (target_lane_id,)).fetchone()
         if not row or not target:
             return False
+        if before_task_id == task_id:
+            return False
         source_board=self.db.execute("SELECT board_id FROM lanes WHERE id=?", (row[0],)).fetchone()
         if not source_board or source_board[0] != target[0]:
             return False
@@ -382,7 +384,7 @@ class Workspace(QObject):
         now=datetime.now().isoformat(timespec="minutes")
         result=self._query("""
             SELECT tasks.* FROM tasks JOIN lanes ON tasks.lane_id=lanes.id
-            WHERE tasks.due IS NOT NULL AND tasks.due<=? AND tasks.reminded=0
+            WHERE tasks.due IS NOT NULL AND REPLACE(tasks.due, ' ', 'T')<=? AND tasks.reminded=0
             AND lanes.timer_enabled=1 ORDER BY tasks.due,tasks.id LIMIT 100
         """, (now,))
         for task in result:
