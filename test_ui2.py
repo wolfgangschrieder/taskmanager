@@ -134,6 +134,30 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.resizeLane(b,580)
         self.assertEqual(next(x["width"] for x in self.ws.lanes(board) if x["id"]==b),580)
 
+    def test_new_tasks_append_after_reordering(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        for title in ("First", "Second"):
+            self.ws.addTask(lane, title, "", "", "")
+        first, second = [task["id"] for task in self.ws.tasks(lane)]
+        self.assertTrue(self.ws.dropTask(second, lane, first))
+        self.ws.addTask(lane, "Third", "", "", "")
+        self.assertEqual([t["title"] for t in self.ws.tasks(lane)],
+                         ["Second", "First", "Third"])
+
+    def test_edit_without_deadline_change_preserves_reminder(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        due = "2026-10-22T14:30"
+        self.ws.addTask(lane, "Original", "", due, "")
+        task_id = self.ws.tasks(lane)[0]["id"]
+        self.ws.db.execute("UPDATE tasks SET reminded=1 WHERE id=?", (task_id,))
+        self.ws.db.commit()
+        self.ws.saveTask(task_id, "Edited", "Changed body", due, "")
+        self.assertEqual(self.ws.task(task_id)["reminded"], 1)
+        self.ws.saveTask(task_id, "Edited", "Changed body", "2026-10-23T14:30", "")
+        self.assertEqual(self.ws.task(task_id)["reminded"], 0)
+
     def test_invalid_due_date_cannot_create_task(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
