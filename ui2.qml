@@ -505,10 +505,10 @@ ApplicationWindow {
             Label { text: "Дедлайн: ГГГГ-ММ-ДД ЧЧ:ММ (пусто — без срока)"; color: root.secondary }
             TextField2 { id: taskDue; Layout.fillWidth: true; placeholderText: "2026-10-20 14:00" }
             Label { visible: !workspace.validDue(taskDue.text); text: "Проверь дату: ГГГГ-ММ-ДД ЧЧ:ММ"; color: "#ff8999" }
-            Label { text: "Цветовой маркер (#RRGGBB)"; color: root.secondary }
+            Label { text: "Цветовой маркер — выбери цвет"; color: root.secondary }
             ColorPicker { id: taskAccent; Layout.fillWidth: true; placeholderText: "#79b7e8" }
             ActionButton {
-                text: "Удалить эту задачу"
+                text: "Удалить задачу навсегда"
                 visible: root.editTaskId > 0
                 Layout.fillWidth: true
                 onClicked: {
@@ -529,7 +529,7 @@ ApplicationWindow {
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
             anchors.fill: parent; spacing: 12
-            Label { text: "Фон колонки"; color: root.secondary }
+            Label { text: "Фон колонки — нажми на цвет"; color: root.secondary }
             ColorPicker { id: laneBackground; Layout.fillWidth: true; placeholderText: "#192535" }
             Label { text: "Цвет текста"; color: root.secondary }
             ColorPicker { id: laneForeground; Layout.fillWidth: true; placeholderText: "#ecf2fb" }
@@ -585,7 +585,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 ActionButton {
-                    text: "Переименовать / изменить"
+                    text: "Изменить текст задачи"
                     Layout.fillWidth: true
                     onClicked: {
                         var task = workspace.task(root.editTaskId)
@@ -594,7 +594,7 @@ ApplicationWindow {
                     }
                 }
                 ActionButton {
-                    text: "Удалить задачу"
+                    text: "Удалить задачу навсегда"
                     Layout.fillWidth: true
                     onClicked: {
                         root.deleteTaskId = root.editTaskId
