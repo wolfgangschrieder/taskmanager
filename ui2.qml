@@ -462,7 +462,22 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            ActionButton { text: "+ Папка"; onClicked: { promptMode="folder";promptTitle.text="";promptDialog.open() } }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                ActionButton {
+                                    text: "+ Папка"
+                                    Layout.fillWidth: true
+                                    onClicked: { promptMode="folder"; promptTitle.text=""; promptDialog.open() }
+                                }
+                                ActionButton {
+                                    text: "Удалить папку"
+                                    enabled: root.folderId > 0
+                                    onClicked: {
+                                        root.deleteFolderId = root.folderId
+                                        confirmDeleteFolder.open()
+                                    }
+                                }
+                            }
                         }
                     }
                     Panel {
@@ -630,6 +645,7 @@ ApplicationWindow {
     property int laneSettingsId: 0
     property int deleteLaneId: 0
     property int deleteTaskId: 0
+    property int deleteFolderId: 0
     StyledDialog {
         id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
         canSubmit: promptTitle.text.trim().length > 0
@@ -639,6 +655,36 @@ ApplicationWindow {
             if (root.promptMode==="board") workspace.addBoard(promptTitle.text)
             else if (root.promptMode==="lane") workspace.addLane(root.boardId,promptTitle.text)
             else if (root.promptMode==="folder") workspace.addFolder(promptTitle.text)
+        }
+    }
+    StyledDialog {
+        id: confirmDeleteFolder
+        title: "Удалить папку?"
+        modal: true
+        anchors.centerIn: parent
+        width: 430
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        confirmLabel: "Удалить"
+        Label {
+            width: 370
+            wrapMode: Text.WordWrap
+            color: root.foreground
+            text: "Папка и все записи в ней будут удалены без возможности отмены. Продолжить?"
+        }
+        onAccepted: {
+            if (root.deleteFolderId <= 0) return
+            root.saveActiveNote()
+            noteSaveTimer.stop()
+            root.loadingNote = true
+            root.noteDirty = false
+            root.selectedNote = 0
+            noteTitle.text = ""
+            noteBody.text = ""
+            workspace.deleteFolder(root.deleteFolderId)
+            root.folderId = 0
+            root.refresh()
+            root.loadingNote = false
+            root.deleteFolderId = 0
         }
     }
     StyledDialog {
@@ -710,6 +756,7 @@ ApplicationWindow {
     }
     StyledDialog {
         id: confirmDeleteLane
+        confirmLabel: "Удалить"
         title: "Удалить колонку со всеми задачами?"
         modal: true
         anchors.centerIn: parent
@@ -763,6 +810,7 @@ ApplicationWindow {
     }
     StyledDialog {
         id: confirmDeleteTask
+        confirmLabel: "Удалить"
         title: "Удалить задачу?"
         modal: true
         anchors.centerIn: parent
