@@ -234,7 +234,6 @@ ApplicationWindow {
                     color: root.foreground; font.pixelSize: 27; font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
-                Label { text: Qt.formatDateTime(new Date(),"dd.MM.yyyy"); color: root.secondary; font.pixelSize: 13 }
             }
             StackLayout {
                 Layout.fillWidth: true
@@ -262,7 +261,6 @@ ApplicationWindow {
                             }
                         }
                         Item { Layout.fillWidth: true }
-                        Label { text: root.laneData.length+" колонок"; color: root.secondary }
                     }
                     Flickable {
                         Layout.fillWidth: true
