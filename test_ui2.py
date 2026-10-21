@@ -110,6 +110,30 @@ class WorkspaceTests(unittest.TestCase):
         saved = next(x for x in self.ws.lanes(board) if x["id"] == lane)
         self.assertEqual(saved["width"], 570)
 
+    def test_drag_order_and_cross_column_moves_persist(self):
+        board=self.ws.boards()[0]["id"]
+        self.ws.addLane(board,"Drag A")
+        self.ws.addLane(board,"Drag B")
+        lanes=self.ws.lanes(board)
+        a=next(x["id"] for x in lanes if x["name"]=="Drag A")
+        b=next(x["id"] for x in lanes if x["name"]=="Drag B")
+        self.assertTrue(self.ws.reorderLane(b,a))
+        ids=[x["id"] for x in self.ws.lanes(board)]
+        self.assertLess(ids.index(b),ids.index(a))
+        self.ws.addTask(a,"First","","","")
+        self.ws.addTask(a,"Second","","","")
+        tasks=self.ws.tasks(a)
+        first=next(x["id"] for x in tasks if x["title"]=="First")
+        second=next(x["id"] for x in tasks if x["title"]=="Second")
+        self.assertTrue(self.ws.dropTask(second,a,first))
+        self.assertEqual([x["id"] for x in self.ws.tasks(a)],[second,first])
+        self.assertTrue(self.ws.dropTask(second,b,0))
+        self.assertEqual([x["id"] for x in self.ws.tasks(a)],[first])
+        self.assertEqual([x["id"] for x in self.ws.tasks(b)],[second])
+        self.assertFalse(self.ws.dropTask(first,b,first))
+        self.ws.resizeLane(b,580)
+        self.assertEqual(next(x["width"] for x in self.ws.lanes(board) if x["id"]==b),580)
+
     def test_invalid_due_date_cannot_create_task(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
