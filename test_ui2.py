@@ -160,7 +160,7 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.resizeLane(b,580)
         self.assertEqual(next(x["width"] for x in self.ws.lanes(board) if x["id"]==b),580)
 
-    def test_cross_board_drop_is_rejected_without_data_loss(self):
+    def test_cross_board_drop_preserves_task_details(self):
         original_board = self.ws.boards()[0]["id"]
         source_lane = self.ws.lanes(original_board)[0]["id"]
         self.ws.addBoard("Separate board")
@@ -169,9 +169,21 @@ class WorkspaceTests(unittest.TestCase):
         target_lane = self.ws.lanes(second_board)[0]["id"]
         self.ws.addTask(source_lane, "Must stay", "Important", "", "")
         task = next(t for t in self.ws.tasks(source_lane) if t["title"] == "Must stay")
-        self.assertFalse(self.ws.dropTask(task["id"], target_lane, 0))
-        self.assertEqual(self.ws.task(task["id"])["lane_id"], source_lane)
-        self.assertEqual(self.ws.tasks(target_lane), [])
+        self.assertTrue(self.ws.dropTask(task["id"], target_lane, 0))
+        self.assertEqual(self.ws.task(task["id"])["lane_id"], target_lane)
+        self.assertEqual(self.ws.task(task["id"])["body"], "Important")
+        self.assertEqual(self.ws.tasks(source_lane), [])
+
+    def test_overdue_marker_and_invalid_destination(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Old", "", "2020-01-01T10:00", "")
+        task_id = self.ws.tasks(lane)[0]["id"]
+        self.assertTrue(self.ws.isOverdue("2020-01-01T10:00"))
+        self.assertFalse(self.ws.isOverdue(""))
+        self.assertFalse(self.ws.isOverdue("not-a-date"))
+        self.assertFalse(self.ws.moveTaskToLane(task_id, 999999))
+        self.assertEqual(self.ws.task(task_id)["lane_id"], lane)
 
     def test_new_tasks_append_after_reordering(self):
         board = self.ws.boards()[0]["id"]
