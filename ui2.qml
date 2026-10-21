@@ -175,9 +175,7 @@ ApplicationWindow {
                         ComboBox {
                             id: boardPicker
                             Layout.preferredWidth: 300
-                            model: root.boardData
-                            textRole: "name"
-                            valueRole: "id"
+                            model: root.boardData.map(function(b) { return b.name; })
                             currentIndex: root.boardData.findIndex(function(b){return b.id===root.boardId})
                             onActivated: function(i) { root.boardId=root.boardData[i].id; root.refresh() }
                         }
