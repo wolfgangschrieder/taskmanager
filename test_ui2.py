@@ -89,6 +89,20 @@ class WorkspaceTests(unittest.TestCase):
         self.assertNotIn("Удаляемая", [x["name"] for x in self.ws.lanes(board)])
         self.assertEqual([x["title"] for x in self.ws.tasks(lanes["Остаётся"])], ["Сохранить"])
 
+    def test_new_columns_inherit_saved_defaults(self):
+        board = self.ws.boards()[0]["id"]
+        self.ws.saveLaneDefaults("#223344", "#ddeeff", "#55c5ad", 530, False)
+        self.ws.addLane(board, "Настроенная колонка")
+        lane = next(x for x in self.ws.lanes(board) if x["name"] == "Настроенная колонка")
+        self.assertEqual(lane["bg_color"], "#223344")
+        self.assertEqual(lane["text_color"], "#ddeeff")
+        self.assertEqual(lane["color"], "#55c5ad")
+        self.assertEqual(lane["width"], 530)
+        self.assertEqual(lane["timer_enabled"], 0)
+        self.ws.saveLaneDefaults("#192535", "#ecf2fb", "#79b7e8", 320, True)
+        unchanged = next(x for x in self.ws.lanes(board) if x["id"] == lane["id"])
+        self.assertEqual(unchanged["width"], 530)
+
     def test_lane_width_persists(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
