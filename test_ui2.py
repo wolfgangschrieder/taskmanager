@@ -258,8 +258,8 @@ class WorkspaceTests(unittest.TestCase):
         destination = self.root / "backups" / "manager-helper-failure-2026-10-22.db"
         with patch.object(ui2, "datetime") as clock:
             clock.now.return_value.strftime.return_value = "2026-10-22"
-            with patch.object(self.ws.db.__class__, "backup", side_effect=sqlite3.DatabaseError("simulated")):
-                with self.assertRaises(sqlite3.DatabaseError):
+            with patch.object(ui2.os, "replace", side_effect=OSError("simulated")):
+                with self.assertRaises(OSError):
                     self.ws._backup("failure")
         self.assertFalse(destination.exists())
         self.assertEqual(list((self.root / "backups").glob(".backup-*.db")), [])
