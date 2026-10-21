@@ -89,6 +89,19 @@ class WorkspaceTests(unittest.TestCase):
         self.assertNotIn("Удаляемая", [x["name"] for x in self.ws.lanes(board)])
         self.assertEqual([x["title"] for x in self.ws.tasks(lanes["Остаётся"])], ["Сохранить"])
 
+    def test_delete_folder_removes_only_its_own_notes(self):
+        self.ws.addFolder("Delete me")
+        self.ws.addFolder("Keep me")
+        folders = {f["name"]: f["id"] for f in self.ws.folders()}
+        doomed = folders["Delete me"]
+        retained = folders["Keep me"]
+        self.ws.addNote(doomed, "Temporary", "Remove")
+        self.ws.addNote(retained, "Important", "Preserve")
+        self.ws.deleteFolder(doomed)
+        self.assertNotIn(doomed, [f["id"] for f in self.ws.folders()])
+        self.assertEqual(self.ws.notes(doomed), [])
+        self.assertEqual(self.ws.notes(retained)[0]["body"], "Preserve")
+
     def test_new_columns_inherit_saved_defaults(self):
         board = self.ws.boards()[0]["id"]
         self.ws.saveLaneDefaults("#223344", "#ddeeff", "#55c5ad", 530, False)
