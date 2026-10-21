@@ -39,6 +39,24 @@ ApplicationWindow {
         noteData=workspace.notes(folderId)
         scheduleData=workspace.schedule()
     }
+    function smokeCrud() {
+        var b = root.boardData[0].id
+        var before = workspace.lanes(b).length
+        root.boardId = b
+        root.promptMode = "lane"
+        promptTitle.text = "SMOKE_TEST_LANE"
+        promptDialog.open()
+        promptDialog.accept()
+        var after = workspace.lanes(b)
+        if (after.length !== before + 1) throw new Error("Column dialog must create exactly one lane")
+        var lane = after[after.length - 1]
+        root.taskEditor(null, lane.id)
+        taskTitle.text = "SMOKE_TEST_TASK"
+        taskBody.text = "Smoke test"
+        taskDue.text = ""
+        taskDialog.accept()
+        if (workspace.tasks(lane.id).length !== 1) throw new Error("Task dialog did not create exactly one task")
+    }
     function deadlineText(raw) {
         if (!raw) return ""
         return raw.replace("T"," ").slice(5,16)
