@@ -284,8 +284,7 @@ class Workspace(QObject):
             due=(datetime.now()+timedelta(minutes=15)).isoformat(timespec="minutes")
             self._write("UPDATE tasks SET due=?,reminded=0 WHERE id=?", (due,task_id))
         elif action=="open":
-            # Opening the editor does not mark the task as completed.
-            pass
+            self._suppressed_alarms[task_id] = datetime.now() + timedelta(minutes=5)
         self._pending_alarm=None
         if action!="open":
             QTimer.singleShot(1000,self.check_alarms)
