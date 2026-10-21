@@ -346,6 +346,7 @@ ApplicationWindow {
                                                 id: taskCard
                                                 required property var modelData
                                                 property int taskId: modelData.id
+                                                property bool overdue: workspace.isOverdue(modelData.due || "")
                                                  property bool wasDragged: false
                                                 Drag.active: taskDrag.active
                                                 Drag.source: taskCard
@@ -376,11 +377,11 @@ ApplicationWindow {
                                                 height: 64
                                                 radius: 12
                                                 color: modelData.bg_color || "#1e3046"
-                                                border.color: "#34506d"
+                                                border.color: taskCard.overdue ? "#d45b68" : "#34506d"
                                                 Rectangle {
                                                     x: 0; y: 7; width: 4; height: parent.height-14
                                                     radius: 2
-                                                    color: taskCard.modelData.color || root.accent
+                                                    color: taskCard.overdue ? "#f17886" : (taskCard.modelData.color || root.accent)
                                                 }
                                                 RowLayout {
                                                     anchors.fill: parent
@@ -397,8 +398,8 @@ ApplicationWindow {
                                                     }
                                                     Label {
                                                         visible: Boolean(taskCard.modelData.due)
-                                                        text: root.deadlineText(taskCard.modelData.due)
-                                                        color: taskCard.modelData.text_color || root.secondary
+                                                        text: taskCard.overdue ? "⚠ Просрочено · " + root.deadlineText(taskCard.modelData.due) : root.deadlineText(taskCard.modelData.due)
+                                                        color: taskCard.overdue ? "#ff9ca5" : (taskCard.modelData.text_color || root.secondary)
                                                         font.pixelSize: 11
                                                     }
                                                 }
@@ -415,6 +416,10 @@ ApplicationWindow {
                                                             taskStyleForeground.text=taskCard.modelData.text_color || ""
                                                             taskStyleAccent.text=taskCard.modelData.color || ""
                                                             taskStyleTelegram.text=taskCard.modelData.telegram_url || ""
+                                                            root.moveTaskBoardId = 0
+                                                            moveTaskBoard.currentIndex = -1
+                                                            root.moveTaskBoardId = root.boardId
+                                                            root.moveTaskLaneId = taskCard.modelData.lane_id
                                                             taskStyle.open()
                                                         } else root.taskEditor(taskCard.modelData,lanePanel.modelData.id)
                                                     }
@@ -676,6 +681,8 @@ ApplicationWindow {
     property int deleteLaneId: 0
     property int deleteBoardId: 0
     property int deleteTaskId: 0
+    property int moveTaskBoardId: 0
+    property int moveTaskLaneId: 0
     property int deleteFolderId: 0
     StyledDialog {
         id: promptDialog; title: "Создать"; modal: true; anchors.centerIn: parent
@@ -889,6 +896,32 @@ ApplicationWindow {
             Label { text: "Ссылка Telegram на сообщение или чат"; color: root.secondary }
             TextField2 { id: taskStyleTelegram; Layout.fillWidth: true; placeholderText: "https://t.me/c/123456789/42" }
             Label { text: "На карточке появится кнопка «К задаче». Пустое поле убирает кнопку."; color: root.secondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Label { text: "Переместить задачу"; color: root.secondary }
+            Label { text: "Доска"; color: root.secondary }
+            ComboBox {
+                id: moveTaskBoard
+                Layout.fillWidth: true
+                model: root.boardData.map(function(b) { return b.name })
+                currentIndex: root.boardData.findIndex(function(b) { return b.id === root.moveTaskBoardId })
+                onActivated: function(i) {
+                    root.moveTaskBoardId = root.boardData[i].id
+                    root.moveTaskLaneId = 0
+                }
+            }
+            Label { text: "Колонка"; color: root.secondary }
+            ComboBox {
+                id: moveTaskLane
+                Layout.fillWidth: true
+                property var destinationLanes: workspace.lanes(root.moveTaskBoardId)
+                model: destinationLanes.map(function(l) { return l.name })
+                currentIndex: destinationLanes.findIndex(function(l) { return l.id === root.moveTaskLaneId })
+                onActivated: function(i) { root.moveTaskLaneId = destinationLanes[i].id }
+            }
+            Label {
+                visible: moveTaskLane.destinationLanes.length === 0
+                text: "На выбранной доске нет колонок."
+                color: "#ff9ca5"
+            }
             RowLayout {
                 Layout.fillWidth: true
                 ActionButton {
@@ -911,7 +944,11 @@ ApplicationWindow {
                 }
             }
         }
-        onAccepted: workspace.configureTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text,taskStyleTelegram.text)
+        onAccepted: {
+            workspace.configureTask(root.editTaskId,taskStyleBackground.text,taskStyleForeground.text,taskStyleAccent.text,taskStyleTelegram.text)
+            if (root.moveTaskLaneId > 0)
+                workspace.moveTaskToLane(root.editTaskId, root.moveTaskLaneId)
+        }
     }
     StyledDialog {
         id: confirmDeleteTask
