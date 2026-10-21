@@ -751,19 +751,43 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            TextArea {
-                                id: noteBody
-                                onTextChanged: {
-                                    if (!root.loadingNote && root.selectedNote > 0) {
-                                        root.noteDirty = true
-                                        noteSaveTimer.restart()
-                                    }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label {
+                                    text: "Текст заметки"
+                                    color: root.secondary
+                                    font.pixelSize: 12
                                 }
-                                Layout.fillWidth: true; Layout.fillHeight: true
-                                wrapMode: TextEdit.Wrap
-                                color: root.foreground
-                                font.pixelSize: 14
-                                background: Rectangle { color: "#223146"; radius: 10 }
+                                Item { Layout.fillWidth: true }
+                                CheckBox {
+                                    id: noteWrapLines
+                                    text: "Переносить строки"
+                                    checked: true
+                                    palette.text: root.secondary
+                                }
+                            }
+                            ScrollView {
+                                id: noteBodyScroll
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                                ScrollBar.horizontal.policy: noteWrapLines.checked ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
+                                TextArea {
+                                    id: noteBody
+                                    width: noteWrapLines.checked ? noteBodyScroll.availableWidth :
+                                           Math.max(noteBodyScroll.availableWidth, implicitWidth)
+                                    wrapMode: noteWrapLines.checked ? TextEdit.Wrap : TextEdit.NoWrap
+                                    onTextChanged: {
+                                        if (!root.loadingNote && root.selectedNote > 0) {
+                                            root.noteDirty = true
+                                            noteSaveTimer.restart()
+                                        }
+                                    }
+                                    color: root.foreground
+                                    font.pixelSize: 14
+                                    background: Rectangle { color: "#223146"; radius: 10 }
+                                }
                             }
                             RowLayout {
                                 ActionButton { text: "Сохранить"; enabled: root.selectedNote>0; onClicked: { root.noteDirty = true; root.saveActiveNote() } }
