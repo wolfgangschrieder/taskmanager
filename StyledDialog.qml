@@ -6,6 +6,7 @@ Dialog {
     id: dialog
     modal: true
     property bool canSubmit: true
+    property string confirmLabel: ""
     padding: 24
     spacing: 16
     palette.windowText: "#edf5ff"
@@ -85,7 +86,7 @@ Dialog {
             }
             Button {
                 id: saveButton
-                text: (dialog.standardButtons & Dialog.Ok) !== 0 ? "Создать" : "Сохранить"
+                text: dialog.confirmLabel || ((dialog.standardButtons & Dialog.Ok) !== 0 ? "Создать" : "Сохранить")
                 width: 138
                 height: 40
                 enabled: dialog.canSubmit
