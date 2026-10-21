@@ -214,13 +214,26 @@ class Workspace(QObject):
             self._write("INSERT INTO lanes(board_id,name,position) VALUES(?,?,COALESCE((SELECT MAX(position)+1 FROM lanes WHERE board_id=?),0))",
                         (board_id,name.strip(),board_id))
 
+    @Slot(int, result=int)
+    def laneTaskCount(self, lane_id):
+        row=self.db.execute("SELECT COUNT(*) FROM tasks WHERE lane_id=?", (lane_id,)).fetchone()
+        return int(row[0])
+
+    @Slot(int, result=bool)
+    def deleteLane(self, lane_id):
+        """Delete a column and its tasks only after the UI confirmation."""
+        with self.db:
+            self.db.execute("DELETE FROM tasks WHERE lane_id=?", (lane_id,))
+            cursor=self.db.execute("DELETE FROM lanes WHERE id=?", (lane_id,))
+        self.changed.emit()
+        return cursor.rowcount > 0
+
     @Slot(int, result=bool)
     def deleteEmptyLane(self, lane_id):
-        """Only remove an empty column; never delete user tasks implicitly."""
-        if self.db.execute("SELECT 1 FROM tasks WHERE lane_id=? LIMIT 1", (lane_id,)).fetchone():
+        """Retained for compatibility with earlier previews."""
+        if self.laneTaskCount(lane_id):
             return False
-        self._write("DELETE FROM lanes WHERE id=?", (lane_id,))
-        return True
+        return self.deleteLane(lane_id)
 
     @Slot(str)
     def addBoard(self, name):
