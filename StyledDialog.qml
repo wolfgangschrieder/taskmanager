@@ -15,9 +15,9 @@ Dialog {
     palette.placeholderText: "#8298b4"
     palette.highlight: "#61bfff"
     background: Rectangle {
-        color: "#152337"
+        color: "#192431"
         radius: 20
-        border.color: "#3b5877"
+        border.color: "#354b61"
         border.width: 1
         Rectangle {
             anchors.fill: parent
@@ -50,7 +50,7 @@ Dialog {
                 font.bold: true
             }
             Text {
-                text: "MANAGER HELPER  /  v1.1"
+                text: "APEX  /  WORKSPACE"
                 color: "#7e9cba"
                 font.pixelSize: 10
                 font.letterSpacing: 1.2
