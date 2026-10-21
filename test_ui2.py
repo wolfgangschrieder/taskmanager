@@ -171,6 +171,28 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.saveTask(task_id, "Edited", "Changed body", "2026-10-23T14:30", "")
         self.assertEqual(self.ws.task(task_id)["reminded"], 0)
 
+    def test_schedule_handles_space_and_iso_deadlines(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Space deadline", "", "2020-01-01 10:00", "")
+        self.ws.addTask(lane, "ISO deadline", "", "2020-01-01T11:00", "")
+        self.assertEqual([t["title"] for t in self.ws.schedule()],
+                         ["Space deadline", "ISO deadline"])
+        self.ws.db.execute("UPDATE tasks SET reminded=1 WHERE title='Space deadline'")
+        self.ws.db.commit()
+        seen = []
+        self.ws.alarmRaised.connect(lambda task_id, title, due: seen.append(title))
+        self.ws.check_alarms()
+        self.assertEqual(seen, ["ISO deadline"])
+
+    def test_self_drop_rejected_without_reordering(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Keep order", "", "", "")
+        task = self.ws.tasks(lane)[0]["id"]
+        self.assertFalse(self.ws.dropTask(task, lane, task))
+        self.assertEqual(self.ws.tasks(lane)[0]["id"], task)
+
     def test_invalid_due_date_cannot_create_task(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
