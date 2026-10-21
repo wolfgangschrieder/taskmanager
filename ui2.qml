@@ -448,7 +448,18 @@ ApplicationWindow {
                                     required property var modelData
                                     width: ListView.view.width
                                     text: modelData.name
-                                    onClicked: { root.folderId=modelData.id; root.noteData=workspace.notes(root.folderId) }
+                                    onClicked: {
+                                        root.saveActiveNote()
+                                        noteSaveTimer.stop()
+                                        root.loadingNote = true
+                                        root.selectedNote = 0
+                                        root.noteDirty = false
+                                        noteTitle.text = ""
+                                        noteBody.text = ""
+                                        root.folderId = modelData.id
+                                        root.noteData = workspace.notes(root.folderId)
+                                        root.loadingNote = false
+                                    }
                                 }
                             }
                             ActionButton { text: "+ Папка"; onClicked: { promptMode="folder";promptTitle.text="";promptDialog.open() } }
@@ -515,7 +526,16 @@ ApplicationWindow {
                             }
                             RowLayout {
                                 ActionButton { text: "Сохранить"; enabled: root.selectedNote>0; onClicked: { root.noteDirty = true; root.saveActiveNote() } }
-                                ActionButton { text: "Удалить"; enabled: root.selectedNote>0; onClicked: { workspace.deleteNote(root.selectedNote);root.selectedNote=0;noteTitle.text="";noteBody.text="" } }
+                                ActionButton { text: "Удалить"; enabled: root.selectedNote>0; onClicked: {
+                                    noteSaveTimer.stop()
+                                    root.noteDirty = false
+                                    root.loadingNote = true
+                                    workspace.deleteNote(root.selectedNote)
+                                    root.selectedNote = 0
+                                    noteTitle.text = ""
+                                    noteBody.text = ""
+                                    root.loadingNote = false
+                                } }
                             }
                         }
                     }
