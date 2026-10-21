@@ -5,6 +5,7 @@ import QtQuick.Layouts
 Dialog {
     id: dialog
     modal: true
+    property bool canSubmit: true
     padding: 24
     spacing: 16
     palette.windowText: "#edf5ff"
@@ -87,6 +88,7 @@ Dialog {
                 text: (dialog.standardButtons & Dialog.Ok) !== 0 ? "Создать" : "Сохранить"
                 width: 138
                 height: 40
+                enabled: dialog.canSubmit
                 onClicked: dialog.accept()
                 contentItem: Text {
                     text: saveButton.text
