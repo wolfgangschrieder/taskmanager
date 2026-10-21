@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -356,11 +357,29 @@ class Workspace(QObject):
         except (OSError,ValueError):
             return {}
 
+    def _save_settings(self, settings):
+        """Atomically replace settings so an interrupted write cannot truncate them."""
+        payload = json.dumps(settings, ensure_ascii=False, indent=2)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=SETTINGS.parent,
+                prefix=".settings-", suffix=".tmp", delete=False
+            ) as handle:
+                temporary = Path(handle.name)
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, SETTINGS)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
     @Slot(str, str)
     def saveAppearance(self, background, accent):
         settings=self.appearance()
         settings.update(background=background,accent=accent)
-        SETTINGS.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding="utf-8")
+        self._save_settings(settings)
         self.changed.emit()
 
     @Slot(str, str, str, int, bool)
@@ -374,7 +393,7 @@ class Workspace(QObject):
             "background":background,"foreground":foreground,"accent":accent,
             "width":max(250,min(720,int(width))),"timer":bool(timer)
         }
-        SETTINGS.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding="utf-8")
+        self._save_settings(settings)
         self.changed.emit()
 
     @Slot()
