@@ -40,6 +40,40 @@ class WorkspaceTests(unittest.TestCase):
             item.stop()
         self.temp.cleanup()
 
+    def test_quick_actions_duplicate_and_complete(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTaskDetails(lane, "Important", "Keep body",
+                               "2030-01-01T10:00", "#79b7e8", "https://t.me/example/123")
+        original = self.ws.tasks(lane)[0]
+        self.assertTrue(self.ws.duplicateTask(original["id"]))
+        tasks = self.ws.tasks(lane)
+        self.assertEqual(len(tasks), 2)
+        copy = next(t for t in tasks if t["id"] != original["id"])
+        self.assertEqual(copy["body"], "Keep body")
+        self.assertEqual(copy["telegram_url"], "https://t.me/example/123")
+        self.assertEqual(copy["due"], original["due"])
+        self.assertTrue(self.ws.completeTask(original["id"]))
+        self.assertIsNone(self.ws.task(original["id"])["due"])
+        self.assertEqual(self.ws.task(copy["id"])["due"], "2030-01-01T10:00")
+
+    def test_advance_reminder_only_once_and_due_alarm(self):
+        from datetime import datetime, timedelta
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        due = (datetime.now() + timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M")
+        self.ws.addTask(lane, "Upcoming", "", due, "")
+        task_id = self.ws.tasks(lane)[0]["id"]
+        seen = []
+        self.ws.reminderRaised.connect(lambda *args: seen.append(args))
+        self.ws.check_alarms()
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][0], task_id)
+        self.ws.resolveAlarm(task_id, "open")
+        self.ws.check_alarms()
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(self.ws.task(task_id)["alert15_sent"], 1)
+
     def test_create_lane_task_and_edit_exactly_once(self):
         board = self.ws.boards()[0]["id"]
         before = len(self.ws.lanes(board))
