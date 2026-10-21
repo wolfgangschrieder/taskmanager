@@ -185,6 +185,19 @@ class WorkspaceTests(unittest.TestCase):
         self.assertFalse(self.ws.moveTaskToLane(task_id, 999999))
         self.assertEqual(self.ws.task(task_id)["lane_id"], lane)
 
+    def test_completed_alarm_clears_overdue_deadline(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Finish this", "", "2020-01-01T10:00", "")
+        task_id = self.ws.tasks(lane)[0]["id"]
+        self.ws._pending_alarm = task_id
+        self.ws.resolveAlarm(task_id, "done")
+        task = self.ws.task(task_id)
+        self.assertIsNone(task["due"])
+        self.assertEqual(task["reminded"], 1)
+        self.assertFalse(self.ws.isOverdue(task["due"]))
+        self.assertEqual(task["title"], "Finish this")
+
     def test_new_tasks_append_after_reordering(self):
         board = self.ws.boards()[0]["id"]
         lane = self.ws.lanes(board)[0]["id"]
