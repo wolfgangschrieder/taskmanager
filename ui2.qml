@@ -298,6 +298,10 @@ ApplicationWindow {
                                                 Drag.hotSpot.y: height / 2
                                                 Label { anchors.centerIn: parent; text: "⠿"; color: root.foreground; font.pixelSize: 18 }
                                                 DragHandler { id: laneDrag; target: null; cursorShape: Qt.OpenHandCursor }
+                                                transform: Translate {
+                                                    x: laneDrag.active ? laneDrag.translation.x : 0
+                                                    y: laneDrag.active ? laneDrag.translation.y : 0
+                                                }
                                             }
                                             Label {
                                                 text: lanePanel.modelData.name
@@ -336,6 +340,11 @@ ApplicationWindow {
                                                     acceptedButtons: Qt.LeftButton
                                                     grabPermissions: PointerHandler.CanTakeOverFromAnything
                                                 }
+                                                transform: Translate {
+                                                    x: taskDrag.active ? taskDrag.translation.x : 0
+                                                    y: taskDrag.active ? taskDrag.translation.y : 0
+                                                }
+                                                z: taskDrag.active ? 30 : 0
                                                 DropArea {
                                                     anchors.fill: parent
                                                     keys: ["manager-task"]
