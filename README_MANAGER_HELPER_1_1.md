@@ -12,3 +12,4 @@ Quality checks: isolated SQLite tests and a QML smoke test that creates one colu
 
 Known limitations: no Kanban drag-and-drop in the new QML UI yet; the silent alarm requires the app to be running and may not overlay unrelated Windows programs.
 Do not run the old and new UI against the database at the same time.
+If an earlier buggy build created duplicate empty columns, open the column menu, choose Delete empty column, and confirm. A column containing tasks is never deleted by this action.
