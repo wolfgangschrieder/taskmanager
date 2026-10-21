@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QUrl
+from PySide6.QtCore import QObject, Signal, Slot, QTimer, QUrl, QMetaObject
 from PySide6.QtGui import QGuiApplication, QDesktopServices
 from PySide6.QtQml import QQmlApplicationEngine
 
@@ -290,17 +290,34 @@ def main():
     engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("ui2.qml"))))
     if not engine.rootObjects():
         raise RuntimeError("Unable to load ui2.qml")
-    screenshot_path=os.environ.get('MANAGER_HELPER_SCREENSHOT')
+    if os.environ.get("APEX_SMOKE_TEST") == "1":
+        def smoke():
+            try:
+                board_id=workspace.boards()[0]["id"]
+                before=len(workspace.lanes(board_id))
+                if not QMetaObject.invokeMethod(engine.rootObjects()[0], "smokeCrud"):
+                    raise RuntimeError("QML smokeCrud method unavailable")
+                lanes=workspace.lanes(board_id)
+                if len(lanes) != before + 1:
+                    raise RuntimeError(f"Expected one new lane, got {len(lanes)-before}")
+                if len(workspace.tasks(lanes[-1]["id"])) != 1:
+                    raise RuntimeError("Task dialog did not persist exactly one task")
+                print("QML CRUD SMOKE PASSED: one lane and one task", flush=True)
+            except Exception as exc:
+                print(f"QML CRUD SMOKE FAILED: {exc}", flush=True)
+                app.exit(2)
+                return
+            app.quit()
+        QTimer.singleShot(500, smoke)
+    screenshot_path=os.environ.get("MANAGER_HELPER_SCREENSHOT")
     if screenshot_path:
         def capture():
             window=engine.rootObjects()[0]
-            image=window.grabWindow()
+            image=app.primaryScreen().grabWindow(window.winId())
             if image.isNull() or not image.save(screenshot_path):
-                raise RuntimeError('Could not capture QML window screenshot')
-        QTimer.singleShot(1000, capture)
-    if os.environ.get('APEX_SMOKE_TEST') == '1':
-        QTimer.singleShot(1800, app.quit)
-    app.exec()
+                print("WARNING: screenshot unavailable on this Qt platform", flush=True)
+        QTimer.singleShot(300, capture)
+    raise SystemExit(app.exec())
 
 
 if __name__=="__main__":
