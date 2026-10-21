@@ -324,6 +324,26 @@ class Workspace(QObject):
         if name.strip():
             self._write("INSERT INTO boards(name) VALUES(?)", (name.strip(),))
 
+    @Slot(int, result=int)
+    def boardTaskCount(self, board_id):
+        row = self.db.execute("""SELECT COUNT(*) FROM tasks
+            JOIN lanes ON tasks.lane_id=lanes.id WHERE lanes.board_id=?""",
+            (board_id,)).fetchone()
+        return int(row[0])
+
+    @Slot(int, result=bool)
+    def deleteBoard(self, board_id):
+        """Remove the board and its lanes/tasks in one transaction."""
+        with self.db:
+            self.db.execute("""DELETE FROM tasks WHERE lane_id IN
+                (SELECT id FROM lanes WHERE board_id=?)""", (board_id,))
+            self.db.execute("DELETE FROM lanes WHERE board_id=?", (board_id,))
+            cursor = self.db.execute("DELETE FROM boards WHERE id=?", (board_id,))
+        if cursor.rowcount:
+            self.changed.emit()
+            return True
+        return False
+
     @Slot(int)
     def deleteTask(self, task_id):
         self._write("DELETE FROM tasks WHERE id=?", (task_id,))
