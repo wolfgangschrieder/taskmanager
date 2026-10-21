@@ -9,14 +9,14 @@ ApplicationWindow {
     visibility: Window.Maximized
     minimumWidth: 900
     minimumHeight: 640
-    title: "MANAGER HELPER // 1.1"
+    title: "APEX — Рабочее пространство"
     color: appBg
-    property color appBg: "#0b111d"
-    property color surface: "#141f30"
-    property color elevated: "#1e3048"
-    property color foreground: "#f0f5ff"
-    property color secondary: "#899db9"
-    property color accent: "#6fc4ff"
+    property color appBg: "#101720"
+    property color surface: "#192431"
+    property color elevated: "#233345"
+    property color foreground: "#eaf1f8"
+    property color secondary: "#98aabd"
+    property color accent: "#79c7ff"
     property int page: 0
     property int boardId: 0
     property int folderId: 0
@@ -123,8 +123,8 @@ ApplicationWindow {
 
     component Panel: Rectangle {
         color: root.surface
-        radius: 18
-        border.color: "#293a53"
+        radius: 14
+        border.color: "#304153"
         border.width: 1
     }
     component ActionButton: Button {
@@ -133,8 +133,8 @@ ApplicationWindow {
         font.weight: Font.DemiBold
         palette.buttonText: root.foreground
         background: Rectangle {
-            radius: 11
-            color: button.down ? "#2c5675" : button.hovered ? "#29435f" : button.highlighted ? "#234764" : root.elevated
+            radius: 9
+            color: button.down ? "#29465f" : button.hovered ? "#2a4157" : button.highlighted ? "#254158" : root.elevated
             border.color: button.hovered || button.highlighted ? root.accent : "#334b65"
         }
     }
@@ -154,17 +154,17 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 238
+            Layout.preferredWidth: 220
             Layout.fillHeight: true
-            color: "#0f1929"
+            color: "#131d28"
             border.color: "#2a3b4f"
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 22
                 spacing: 13
-                Label { text: "MANAGER"; color: root.foreground; font.pixelSize: 24; font.bold: true }
-                Label { text: "HELPER  /  v1.1"; color: root.accent; font.pixelSize: 13; font.bold: true }
-                Label { text: "PERSONAL WORKSPACE"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 1 }
+                Label { text: "APEX"; color: root.foreground; font.pixelSize: 26; font.bold: true }
+                Label { text: "WORKSPACE"; color: root.accent; font.pixelSize: 12; font.bold: true }
+                Label { text: "ЗАДАЧИ · ЗАМЕТКИ · СРОКИ"; color: root.secondary; font.pixelSize: 10; font.letterSpacing: 0.5 }
                 Item { Layout.preferredHeight: 14 }
                 Repeater {
                     model: ["Доски","Расписание","Блокнот","Оформление"]
@@ -183,13 +183,13 @@ ApplicationWindow {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 28
+            Layout.margins: 24
             spacing: 16
             RowLayout {
                 Layout.fillWidth: true
                 Label {
                     text: ["Рабочие доски","Расписание","Блокнот","Оформление"][root.page]
-                    color: root.foreground; font.pixelSize: 30; font.weight: Font.DemiBold
+                    color: root.foreground; font.pixelSize: 27; font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
                 Label { text: Qt.formatDateTime(new Date(),"dd.MM.yyyy"); color: root.secondary; font.pixelSize: 13 }
@@ -224,7 +224,7 @@ ApplicationWindow {
                         Row {
                             id: laneRow
                             height: boardScroll.height
-                            spacing: 18
+                            spacing: 14
                             Repeater {
                                 model: root.laneData
                                 delegate: Panel {
@@ -362,7 +362,7 @@ ApplicationWindow {
                                                     }
                                                 }
                                                 width: laneColumn.width
-                                                height: 72
+                                                height: 64
                                                 radius: 12
                                                 color: modelData.bg_color || "#1e3046"
                                                 border.color: "#34506d"
