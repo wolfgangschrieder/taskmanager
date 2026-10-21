@@ -804,6 +804,7 @@ ApplicationWindow {
     }
     StyledDialog {
         id: laneSettings; title: "Настройки колонки"; modal: true; anchors.centerIn: parent; width: 440
+        canSubmit: laneName.text.trim().length > 0
         standardButtons: Dialog.Save | Dialog.Cancel
         ColumnLayout {
             anchors.fill: parent; spacing: 12
