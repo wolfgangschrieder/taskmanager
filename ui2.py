@@ -210,9 +210,17 @@ class Workspace(QObject):
 
     @Slot(int, str)
     def addLane(self, board_id, name):
-        if name.strip():
-            self._write("INSERT INTO lanes(board_id,name,position) VALUES(?,?,COALESCE((SELECT MAX(position)+1 FROM lanes WHERE board_id=?),0))",
-                        (board_id,name.strip(),board_id))
+        if not name.strip():
+            return
+        defaults=self.appearance().get("lane_defaults", {})
+        bg=defaults.get("background", "#192535")
+        fg=defaults.get("foreground", "#ecf2fb")
+        accent=defaults.get("accent", "#79b7e8")
+        width=max(250,min(720,int(defaults.get("width",320))))
+        timer=int(bool(defaults.get("timer",True)))
+        self._write("""INSERT INTO lanes(board_id,name,position,bg_color,text_color,color,width,timer_enabled)
+            VALUES(?,?,COALESCE((SELECT MAX(position)+1 FROM lanes WHERE board_id=?),0),?,?,?,?,?)""",
+            (board_id,name.strip(),board_id,bg,fg,accent,width,timer))
 
     @Slot(int, result=int)
     def laneTaskCount(self, lane_id):
@@ -294,6 +302,20 @@ class Workspace(QObject):
     def saveAppearance(self, background, accent):
         settings=self.appearance()
         settings.update(background=background,accent=accent)
+        SETTINGS.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding="utf-8")
+        self.changed.emit()
+
+    @Slot(str, str, str, int, bool)
+    def saveLaneDefaults(self, background, foreground, accent, width, timer):
+        import re
+        colors=(background,foreground,accent)
+        if not all(re.fullmatch(r"#[0-9a-fA-F]{6}", value or "") for value in colors):
+            return
+        settings=self.appearance()
+        settings["lane_defaults"]={
+            "background":background,"foreground":foreground,"accent":accent,
+            "width":max(250,min(720,int(width))),"timer":bool(timer)
+        }
         SETTINGS.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding="utf-8")
         self.changed.emit()
 
