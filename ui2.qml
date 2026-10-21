@@ -21,6 +21,30 @@ ApplicationWindow {
     property int boardId: 0
     property int folderId: 0
     property int selectedNote: 0
+    property bool noteDirty: false
+    property bool loadingNote: false
+    function saveActiveNote() {
+        if (selectedNote > 0 && noteDirty) {
+            noteDirty = false
+            workspace.saveNote(selectedNote, noteTitle.text, noteBody.text)
+        }
+    }
+    function selectNote(note) {
+        saveActiveNote()
+        loadingNote = true
+        selectedNote = note.id
+        noteTitle.text = note.title
+        noteBody.text = note.body
+        noteDirty = false
+        loadingNote = false
+    }
+    onClosing: saveActiveNote()
+    Timer {
+        id: noteSaveTimer
+        interval: 750
+        repeat: false
+        onTriggered: root.saveActiveNote()
+    }
     property int editTaskId: 0
     property int editLaneId: 0
     property int alarmTaskId: 0
@@ -368,13 +392,19 @@ ApplicationWindow {
                                     width: ListView.view.width
                                     text: modelData.title
                                     onClicked: {
-                                        root.selectedNote=modelData.id
-                                        noteTitle.text=modelData.title
-                                        noteBody.text=modelData.body
+                                        root.selectNote(modelData)
                                     }
                                 }
                             }
-                            ActionButton { text: "+ Запись"; onClicked: workspace.addNote(root.folderId,"Новая запись","") }
+                            ActionButton {
+                                text: "+ Запись"
+                                enabled: root.folderId > 0
+                                onClicked: {
+                                    root.saveActiveNote()
+                                    var newId = workspace.addNote(root.folderId,"Новая запись","")
+                                    root.selectNote(workspace.note(newId))
+                                }
+                            }
                         }
                     }
                     Panel {
@@ -382,9 +412,25 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 12
-                            TextField2 { id: noteTitle; Layout.fillWidth: true; placeholderText: "Название записи" }
+                            TextField2 {
+                                id: noteTitle
+                                Layout.fillWidth: true
+                                placeholderText: "Название записи"
+                                onTextEdited: {
+                                    if (!root.loadingNote && root.selectedNote > 0) {
+                                        root.noteDirty = true
+                                        noteSaveTimer.restart()
+                                    }
+                                }
+                            }
                             TextArea {
                                 id: noteBody
+                                onTextChanged: {
+                                    if (!root.loadingNote && root.selectedNote > 0) {
+                                        root.noteDirty = true
+                                        noteSaveTimer.restart()
+                                    }
+                                }
                                 Layout.fillWidth: true; Layout.fillHeight: true
                                 wrapMode: TextEdit.Wrap
                                 color: root.foreground
@@ -392,7 +438,7 @@ ApplicationWindow {
                                 background: Rectangle { color: "#223146"; radius: 10 }
                             }
                             RowLayout {
-                                ActionButton { text: "Сохранить"; enabled: root.selectedNote>0; onClicked: workspace.saveNote(root.selectedNote,noteTitle.text,noteBody.text) }
+                                ActionButton { text: "Сохранить"; enabled: root.selectedNote>0; onClicked: { root.noteDirty = true; root.saveActiveNote() } }
                                 ActionButton { text: "Удалить"; enabled: root.selectedNote>0; onClicked: { workspace.deleteNote(root.selectedNote);root.selectedNote=0;noteTitle.text="";noteBody.text="" } }
                             }
                         }
