@@ -227,8 +227,13 @@ class WorkspaceTests(unittest.TestCase):
         lane = self.ws.lanes(board)[0]["id"]
         self.ws.addTask(lane, "Space deadline", "", "2020-01-01 10:00", "")
         self.ws.addTask(lane, "ISO deadline", "", "2020-01-01T11:00", "")
-        self.assertEqual([t["title"] for t in self.ws.schedule()],
+        items = self.ws.schedule()
+        self.assertEqual([t["heading"] for t in items if t["is_header"]],
+                         ["Просроченные"])
+        self.assertEqual([t["title"] for t in items if not t["is_header"]],
                          ["Space deadline", "ISO deadline"])
+        self.assertEqual(items[1]["display_time"], "10:00")
+        self.assertEqual(items[1]["display_date"], "01/01/2020")
         self.ws.db.execute("UPDATE tasks SET reminded=1 WHERE title='Space deadline'")
         self.ws.db.commit()
         seen = []
