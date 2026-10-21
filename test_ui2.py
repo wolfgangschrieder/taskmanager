@@ -70,6 +70,18 @@ class WorkspaceTests(unittest.TestCase):
         self.ws.saveNote(note["id"], "Заметка 2", "Обновлено")
         self.assertEqual(self.ws.note(note["id"])["body"], "Обновлено")
 
+    def test_alarm_open_does_not_retrigger_immediately(self):
+        board = self.ws.boards()[0]["id"]
+        lane = self.ws.lanes(board)[0]["id"]
+        self.ws.addTask(lane, "Просроченная", "", "2020-01-01T12:00", "")
+        seen = []
+        self.ws.alarmRaised.connect(lambda task_id, title, due: seen.append(task_id))
+        self.ws.check_alarms()
+        self.assertEqual(len(seen), 1)
+        self.ws.resolveAlarm(seen[0], "open")
+        self.ws.check_alarms()
+        self.assertEqual(len(seen), 1)
+
     def test_backup_and_migration_are_additive(self):
         self.assertTrue((self.root / "backups").is_dir())
         self.ws.addBoard("Существующая")
