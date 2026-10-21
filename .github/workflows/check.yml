@@ -16,6 +16,10 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Compile Python sources
         run: python -m compileall -q app.py board_widgets.py theme.py ui2.py
+      - name: Run isolated SQLite regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest -v test_ui2
       - name: Launch QML offscreen
         env:
           QT_QPA_PLATFORM: offscreen
