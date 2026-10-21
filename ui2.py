@@ -178,6 +178,47 @@ class Workspace(QObject):
                         VALUES(?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0))""",
                         (lane_id,title.strip(),body,due or None,color,lane_id))
 
+    @Slot(int, str, str, str, str, str)
+    def saveTaskDetails(self, task_id, title, body, due, color, telegram_url):
+        if not title.strip() or not self.validDue(due):
+            return
+        normalized = self._telegram_url(telegram_url)
+        if normalized is None:
+            return
+        self._write("""UPDATE tasks SET title=?,body=?,due=?,color=?,telegram_url=?,
+                     reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END
+                     WHERE id=?""",
+                    (title.strip(), body, due or None, color, normalized, due or None, task_id))
+
+    @Slot(int, str, str, str, str, str)
+    def addTaskDetails(self, lane_id, title, body, due, color, telegram_url):
+        if not title.strip() or not self.validDue(due):
+            return
+        normalized = self._telegram_url(telegram_url)
+        if normalized is None:
+            return
+        self._write("""INSERT INTO tasks(lane_id,title,body,due,color,telegram_url,position)
+                     VALUES(?,?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tasks WHERE lane_id=?),0))""",
+                    (lane_id, title.strip(), body, due or None, color, normalized, lane_id))
+
+    def _telegram_url(self, raw):
+        raw = raw.strip()
+        if not raw:
+            return ""
+        url = QUrl.fromUserInput(raw)
+        if (url.scheme().lower() == "https" and url.host().lower() in
+                ("t.me", "telegram.me", "telegram.dog")) or (url.scheme().lower() == "tg" and url.isValid()):
+            return url.toString()
+        return None
+
+    @Slot(str, result=bool)
+    def validTelegram(self, raw):
+        return self._telegram_url(raw) is not None
+
+    @Slot(result=str)
+    def defaultTaskDue(self):
+        return (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M")
+
     @Slot(int, str, str, str, int)
     def styleLane(self, lane_id, background, foreground, accent, width):
         self._write("UPDATE lanes SET bg_color=?,text_color=?,color=?,width=? WHERE id=?",
@@ -205,12 +246,28 @@ class Workspace(QObject):
 
     @Slot(str, result=bool)
     def openTelegram(self, raw_url):
-        """Open only Telegram links with the Windows default protocol handler/browser."""
-        url = QUrl.fromUserInput(raw_url.strip())
-        scheme, host = url.scheme().lower(), url.host().lower()
-        if not ((scheme == "https" and host in ("t.me", "telegram.me", "telegram.dog"))
-                or (scheme == "tg" and url.isValid())):
+        """Prefer Telegram Desktop's registered tg:// handler; fall back to HTTPS."""
+        normalized = self._telegram_url(raw_url)
+        if not normalized:
             return False
+        url = QUrl(normalized)
+        if url.scheme().lower() == "tg":
+            return QDesktopServices.openUrl(url)
+        path = url.path().strip("/")
+        if path:
+            if path.startswith("+") or path.startswith("joinchat/"):
+                token = path[1:] if path.startswith("+") else path.split("/", 1)[1]
+                deep = QUrl("tg://join?invite=" + token)
+            elif path.startswith("c/"):
+                parts = path.split("/")
+                deep = QUrl("tg://privatepost?channel=" + parts[1] +
+                            ("&post=" + parts[2] if len(parts) > 2 else "")) if len(parts) >= 3 else None
+            else:
+                parts = path.split("/")
+                deep = QUrl("tg://resolve?domain=" + parts[0] +
+                            ("&post=" + parts[1] if len(parts) > 1 and parts[1].isdigit() else ""))
+            if deep is not None and QDesktopServices.openUrl(deep):
+                return True
         return QDesktopServices.openUrl(url)
 
     @Slot(int, bool)
