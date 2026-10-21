@@ -172,7 +172,7 @@ ApplicationWindow {
                         required property int index
                         required property string modelData
                         Layout.fillWidth: true
-                        text: modelData
+                        text: ["▦  ", "◷  ", "▤  ", "⚙  "][index] + modelData
                         highlighted: root.page===index
                         onClicked: root.page=index
                     }
