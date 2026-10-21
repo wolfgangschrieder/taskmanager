@@ -91,6 +91,14 @@ class Workspace(QObject):
         return self._query("SELECT * FROM lanes WHERE board_id=? ORDER BY position,id", (board_id,))
 
     @Slot(int, result="QVariantList")
+    def siblingLanes(self, lane_id):
+        return self._query("""
+            SELECT sibling.* FROM lanes sibling
+            JOIN lanes origin ON origin.board_id=sibling.board_id
+            WHERE origin.id=? ORDER BY sibling.position,sibling.id
+        """, (lane_id,))
+
+    @Slot(int, result="QVariantList")
     def tasks(self, lane_id):
         return self._query("SELECT * FROM tasks WHERE lane_id=? ORDER BY position,id", (lane_id,))
 
