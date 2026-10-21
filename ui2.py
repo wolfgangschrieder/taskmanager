@@ -194,7 +194,7 @@ class Workspace(QObject):
             return
         if task_id:
             self._write("""UPDATE tasks SET title=?,body=?,due=?,color=?,
-                        reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END, alert15_sent=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN alert15_sent ELSE 0 END, alert15_sent=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN alert15_sent ELSE 0 END
+                        reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END, alert15_sent=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN alert15_sent ELSE 0 END
                         WHERE id=?""",
                         (title,body,due or None,color,due or None,due or None,task_id))
 
@@ -213,7 +213,8 @@ class Workspace(QObject):
         if normalized is None:
             return
         self._write("""UPDATE tasks SET title=?,body=?,due=?,color=?,telegram_url=?,
-                     reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END
+                     reminded=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN reminded ELSE 0 END,
+                     alert15_sent=CASE WHEN COALESCE(due, '')=COALESCE(?, '') THEN alert15_sent ELSE 0 END
                      WHERE id=?""",
                     (title.strip(), body, due or None, color, normalized, due or None, due or None, task_id))
 
