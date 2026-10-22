@@ -44,7 +44,11 @@ jobs:
           MANAGER_HELPER_SMOKE_TEST: "1"
         run: |
           $exe = (Resolve-Path "dist/Manager Helper 1.1/Manager Helper 1.1.exe").Path
-          $process = Start-Process -FilePath $exe -PassThru -Wait
+          $process = Start-Process -FilePath $exe -PassThru
+          if (!$process.WaitForExit(45000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "Packaged EXE startup timed out after 45 seconds"
+          }
           if ($process.ExitCode -ne 0) {
             throw "Packaged EXE failed startup smoke test with exit code $($process.ExitCode)"
           }
