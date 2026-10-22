@@ -85,12 +85,16 @@ class Workspace(QObject):
                 dir=backup_dir, prefix=".backup-", suffix=".db", delete=False
             ) as handle:
                 temporary = Path(handle.name)
-            with sqlite3.connect(temporary) as target:
+            target = sqlite3.connect(temporary)
+            try:
                 self.db.backup(target)
                 check = target.execute("PRAGMA quick_check").fetchone()
                 if not check or check[0] != "ok":
                     raise sqlite3.DatabaseError("Backup integrity check failed")
-            # SQLite backup connections are closed before Windows renames the file.
+            finally:
+                # sqlite3 connection context managers commit but DO NOT close.
+                # On Windows an open SQLite handle prevents os.replace().
+                target.close()
             os.replace(temporary, destination)
         finally:
             if temporary is not None:
