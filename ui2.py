@@ -639,6 +639,8 @@ class Workspace(QObject):
 
 
 def main():
+    os.environ.setdefault('QT_QUICK_BACKEND', 'software')
+    os.environ.setdefault('QSG_RHI_BACKEND', 'software')
     app=QGuiApplication([])
     engine=QQmlApplicationEngine()
     workspace=Workspace()
