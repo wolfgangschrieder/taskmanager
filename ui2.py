@@ -90,11 +90,15 @@ class Workspace(QObject):
                 check = target.execute("PRAGMA quick_check").fetchone()
                 if not check or check[0] != "ok":
                     raise sqlite3.DatabaseError("Backup integrity check failed")
-            # A complete snapshot is published only after the copy and check succeed.
+            # SQLite backup connections are closed before Windows renames the file.
             os.replace(temporary, destination)
         finally:
             if temporary is not None:
-                temporary.unlink(missing_ok=True)
+                try:
+                    temporary.unlink(missing_ok=True)
+                except PermissionError:
+                    # Antivirus/indexers can briefly hold a completed temp file on Windows.
+                    pass
 
     def _query(self, sql, args=()):
         return [dict(row) for row in self.db.execute(sql, args)]
