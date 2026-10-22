@@ -22,7 +22,7 @@ jobs:
       - name: Build portable application
         run: >
           python -m PyInstaller
-          --noconfirm --clean --windowed --onedir
+          --noconfirm --clean --console --onedir
           --name "Manager Helper 1.1"
           --add-data "ui2.qml;."
           --add-data "StyledDialog.qml;."
@@ -37,23 +37,21 @@ jobs:
             $found = Get-ChildItem "dist/Manager Helper 1.1" -Recurse -Filter $file
             if (!$found) { throw "Missing packaged QML: $file" }
           }
-      - name: Smoke test packaged EXE on Windows
+      - name: Diagnose Qt DLL loading in packaged EXE
         shell: pwsh
-        env:
-          QT_QPA_PLATFORM: offscreen
-          MANAGER_HELPER_SMOKE_TEST: "1"
         run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:MANAGER_HELPER_SMOKE_TEST = "1"
+          $env:QT_DEBUG_PLUGINS = "1"
           $exe = (Resolve-Path "dist/Manager Helper 1.1/Manager Helper 1.1.exe").Path
-          $process = Start-Process -FilePath $exe -PassThru
+          $proc = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput "$PWD/stdout.txt" -RedirectStandardError "$PWD/stderr.txt"
           try {
-            if (!$process.WaitForExit(45000)) {
-              throw "Packaged EXE startup timed out after 45 seconds"
-            }
-            if ($process.ExitCode -ne 0) {
-              throw "Packaged EXE failed startup smoke test with exit code $($process.ExitCode)"
-            }
+            if (!$proc.WaitForExit(20000)) { throw "Packaged EXE did not exit within 20 seconds" }
+            if ($proc.ExitCode -ne 0) { throw "Packaged EXE exit code $($proc.ExitCode)" }
           } finally {
-            if (!$process.HasExited) { Stop-Process -Id $process.Id -Force }
+            if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+            if (Test-Path stdout.txt) { Get-Content stdout.txt }
+            if (Test-Path stderr.txt) { Get-Content stderr.txt }
           }
       - name: Zip portable app
         shell: pwsh
