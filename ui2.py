@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, Signal, Slot, QTimer, QUrl, QMetaObject
 from PySide6.QtGui import QGuiApplication, QDesktopServices
 from PySide6.QtQml import QQmlApplicationEngine
 
-ROOT = Path.home() / ".apex_task_control"
+ROOT = (Path(tempfile.gettempdir()) / "manager-helper-packaged-smoke" if os.environ.get("MANAGER_HELPER_SMOKE_TEST") == "1" else Path.home() / ".apex_task_control")
 ROOT.mkdir(exist_ok=True)
 DB = ROOT / "apex.db"
 SETTINGS = ROOT / "settings.json"
@@ -657,6 +657,9 @@ def main():
                 return
             app.quit()
         QTimer.singleShot(500, smoke)
+    if os.environ.get("MANAGER_HELPER_SMOKE_TEST") == "1":
+        # Verify QtCore, QtQml, QML plugins and UI initialization in the packaged EXE.
+        QTimer.singleShot(1000, app.quit)
     screenshot_path=os.environ.get("MANAGER_HELPER_SCREENSHOT")
     if screenshot_path:
         def capture():
